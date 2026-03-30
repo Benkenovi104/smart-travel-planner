@@ -1,0 +1,215 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Usuario {
+  id_usuario        Int              @id @default(autoincrement())
+  nombre            String?          @db.VarChar
+  apellido          String?          @db.VarChar
+  email             String           @unique @db.VarChar
+  password_hash     String           @db.VarChar
+  fecha_registro    DateTime?        @db.Timestamp(6)
+  perfil_viajero    PerfilViajero?
+  usuario_intereses UsuarioInteres[]
+  viajes            Viaje[]
+
+  @@map("usuarios")
+}
+
+model PerfilViajero {
+  id_perfil             Int     @id @default(autoincrement())
+  id_usuario            Int     @unique
+  ritmoPreferido        String? @map("ritmo_preferido") @db.VarChar
+  presupuesto_preferido String? @db.VarChar
+  tipoViajero           String? @map("tipo_viajero") @db.VarChar
+  usuarios              Usuario @relation(fields: [id_usuario], references: [id_usuario], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("perfil_viajero")
+}
+
+model Interes {
+  id_interes        Int              @id @default(autoincrement())
+  nombre            String           @unique @db.VarChar
+  usuario_intereses UsuarioInteres[]
+  viaje_intereses   ViajeInteres[]
+
+  @@map("intereses")
+}
+
+model UsuarioInteres {
+  id_usuario Int
+  id_interes Int
+  prioridad  Int?
+  intereses  Interes @relation(fields: [id_interes], references: [id_interes], onDelete: NoAction, onUpdate: NoAction)
+  usuarios   Usuario @relation(fields: [id_usuario], references: [id_usuario], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([id_usuario, id_interes])
+  @@map("usuario_intereses")
+}
+
+model Viaje {
+  id_viaje             Int                 @id @default(autoincrement())
+  id_usuario           Int
+  origen               String              @db.VarChar
+  destino_principal    String              @db.VarChar
+  fechaInicio          DateTime            @map("fecha_inicio") @db.Date
+  fechaFin             DateTime            @map("fecha_fin") @db.Date
+  cantidadPersonas     Int?                @map("cantidad_personas")
+  presupuestoTotal     Decimal?            @map("presupuesto_total") @db.Decimal(12, 2)
+  estado               String?             @db.VarChar
+  fecha_creacion       DateTime?           @db.Timestamp(6)
+  gastos_estimados     GastoEstimado[]
+  itinerarios          Itinerario?
+  opciones_alojamiento OpcionAlojamiento[]
+  opciones_vuelo       OpcionVuelo[]
+  presupuestos         Presupuesto?
+  viaje_intereses      ViajeInteres[]
+  usuarios             Usuario             @relation(fields: [id_usuario], references: [id_usuario], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("viajes")
+}
+
+model ViajeInteres {
+  id_viaje   Int
+  id_interes Int
+  prioridad  Int?
+  intereses  Interes @relation(fields: [id_interes], references: [id_interes], onDelete: NoAction, onUpdate: NoAction)
+  viajes     Viaje   @relation(fields: [id_viaje], references: [id_viaje], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([id_viaje, id_interes])
+  @@map("viaje_intereses")
+}
+
+model Itinerario {
+  id_itinerario      Int                @id @default(autoincrement())
+  id_viaje           Int                @unique
+  fecha_generacion   DateTime?          @db.Timestamp(6)
+  tipo_generacion    String?            @db.VarChar
+  cambios_itinerario CambioItinerario[]
+  dias_itinerario    DiaItinerario[]
+  viajes             Viaje              @relation(fields: [id_viaje], references: [id_viaje], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("itinerarios")
+}
+
+model DiaItinerario {
+  id_dia_itinerario      Int                   @id @default(autoincrement())
+  id_itinerario          Int
+  numeroDia              Int                   @map("numero_dia")
+  fecha                  DateTime              @db.Date
+  costo_estimado_dia     Decimal?              @db.Decimal(12, 2)
+  actividades_itinerario ActividadItinerario[]
+  itinerarios            Itinerario            @relation(fields: [id_itinerario], references: [id_itinerario], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("dias_itinerario")
+}
+
+model Lugar {
+  id_lugar               Int                   @id @default(autoincrement())
+  nombre                 String                @db.VarChar
+  ciudad                 String?               @db.VarChar
+  pais                   String?               @db.VarChar
+  direccion              String?               @db.VarChar
+  latitud                Decimal?              @db.Decimal(10, 7)
+  longitud               Decimal?              @db.Decimal(10, 7)
+  categoria              String?               @db.VarChar
+  rating                 Decimal?              @db.Decimal(3, 2)
+  precio_estimado        Decimal?              @db.Decimal(12, 2)
+  duracionEstimadaMin    Int?                  @map("duracion_estimada_min")
+  horarioApertura        DateTime?             @map("horario_apertura") @db.Time(6)
+  horario_cierre         DateTime?             @db.Time(6)
+  fuente_api             String?               @db.VarChar
+  actividades_itinerario ActividadItinerario[]
+
+  @@map("lugares")
+}
+
+model ActividadItinerario {
+  id_actividad         Int           @id @default(autoincrement())
+  id_dia_itinerario    Int
+  id_lugar             Int
+  orden                Int?
+  hora_inicio_estimada DateTime?     @db.Time(6)
+  hora_fin_estimada    DateTime?     @db.Time(6)
+  tipo_actividad       String?       @db.VarChar
+  costoEstimado        Decimal?      @map("costo_estimado") @db.Decimal(12, 2)
+  estado               String?       @db.VarChar
+  dias_itinerario      DiaItinerario @relation(fields: [id_dia_itinerario], references: [id_dia_itinerario], onDelete: NoAction, onUpdate: NoAction)
+  lugares              Lugar         @relation(fields: [id_lugar], references: [id_lugar], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("actividades_itinerario")
+}
+
+model Presupuesto {
+  id_presupuesto         Int      @id @default(autoincrement())
+  id_viaje               Int      @unique
+  monto_total            Decimal? @db.Decimal(12, 2)
+  monto_vuelos           Decimal? @db.Decimal(12, 2)
+  monto_alojamiento      Decimal? @db.Decimal(12, 2)
+  monto_actividades      Decimal? @db.Decimal(12, 2)
+  monto_comidas          Decimal? @db.Decimal(12, 2)
+  monto_transporte_local Decimal? @db.Decimal(12, 2)
+  viajes                 Viaje    @relation(fields: [id_viaje], references: [id_viaje], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("presupuestos")
+}
+
+model GastoEstimado {
+  id_gasto      Int      @id @default(autoincrement())
+  id_viaje      Int
+  categoria     String?  @db.VarChar
+  descripcion   String?  @db.VarChar
+  montoEstimado Decimal? @map("monto_estimado") @db.Decimal(12, 2)
+  viajes        Viaje    @relation(fields: [id_viaje], references: [id_viaje], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("gastos_estimados")
+}
+
+model OpcionVuelo {
+  id_vuelo       Int       @id @default(autoincrement())
+  id_viaje       Int
+  origen         String?   @db.VarChar
+  destino        String?   @db.VarChar
+  fechaSalida    DateTime? @map("fecha_salida") @db.Timestamp(6)
+  fecha_regreso  DateTime? @db.Timestamp(6)
+  aerolinea      String?   @db.VarChar
+  precio         Decimal?  @db.Decimal(12, 2)
+  moneda         String?   @db.VarChar
+  duracion_total Int?
+  url_referencia String?   @db.VarChar
+  viajes         Viaje     @relation(fields: [id_viaje], references: [id_viaje], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("opciones_vuelo")
+}
+
+model OpcionAlojamiento {
+  id_alojamiento   Int      @id @default(autoincrement())
+  id_viaje         Int
+  nombre           String?  @db.VarChar
+  tipo             String?  @db.VarChar
+  direccion        String?  @db.VarChar
+  precio_por_noche Decimal? @db.Decimal(12, 2)
+  rating           Decimal? @db.Decimal(3, 2)
+  latitud          Decimal? @db.Decimal(10, 7)
+  longitud         Decimal? @db.Decimal(10, 7)
+  url_referencia   String?  @db.VarChar
+  viajes           Viaje    @relation(fields: [id_viaje], references: [id_viaje], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("opciones_alojamiento")
+}
+
+model CambioItinerario {
+  id_cambio     Int        @id @default(autoincrement())
+  id_itinerario Int
+  tipo_cambio   String?    @db.VarChar
+  descripcion   String?    @db.VarChar
+  fecha_cambio  DateTime?  @db.Timestamp(6)
+  itinerarios   Itinerario @relation(fields: [id_itinerario], references: [id_itinerario], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("cambios_itinerario")
+}
