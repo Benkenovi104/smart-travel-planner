@@ -2,8 +2,11 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  UnauthorizedException,
 } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { ViajesService } from '../viajes/viajes.service.js';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto.js';
 import { UpsertPerfilDto } from './dto/upsert-perfil.dto.js';
 import { AddInteresDto } from './dto/add-interes.dto.js';
@@ -131,5 +134,37 @@ export class UsuariosService {
       select: { id_interes: true, nombre: true },
       orderBy: { nombre: 'asc' },
     });
+  }
+
+  async deleteMe(id_usuario: number, password: string) {
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id_usuario },
+      select: { id_usuario: true, password_hash: true },
+    });
+    if (!usuario) throw new NotFoundException('Usuario no encontrado');
+
+    // Confirmación con la contraseña actual: el borrado de cuenta es
+    // irreversible, no alcanza con estar autenticado.
+    const passwordOk = await bcrypt.compare(password, usuario.password_hash);
+    if (!passwordOk) throw new UnauthorizedException('Contraseña incorrecta');
+
+    // Cascade manual completo (el schema usa onDelete: NoAction): primero los
+    // viajes con todos sus hijos, después perfil e intereses, y al final el
+    // usuario. Todo en una transacción para no dejar la cuenta a medio borrar.
+    await this.prisma.$transaction(async (tx) => {
+      const viajes = await tx.viaje.findMany({
+        where: { id_usuario },
+        select: { id_viaje: true },
+      });
+      for (const { id_viaje } of viajes) {
+        await ViajesService.cascadeDeleteEnTx(tx, id_viaje);
+      }
+
+      await tx.perfilViajero.deleteMany({ where: { id_usuario } });
+      await tx.usuarioInteres.deleteMany({ where: { id_usuario } });
+      await tx.usuario.delete({ where: { id_usuario } });
+    });
+
+    return { message: 'Cuenta eliminada correctamente' };
   }
 }

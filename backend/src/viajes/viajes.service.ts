@@ -4,8 +4,11 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { Prisma } from '../../generated/prisma/client.js';
 import { CreateViajeDto } from './dto/create-viaje.dto.js';
 import { UpdateViajeDto } from './dto/update-viaje.dto.js';
+
+type Tx = Prisma.TransactionClient;
 
 const VIAJE_SELECT = {
   id_viaje: true,
@@ -108,36 +111,40 @@ export class ViajesService {
   async remove(id_usuario: number, id_viaje: number) {
     await this.findOne(id_usuario, id_viaje);
 
-    // Cascade manual: no hay onDelete cascade en el schema, así que hay que
-    // borrar todas las tablas dependientes de "viajes" antes que el padre.
-    await this.prisma.$transaction(async (tx) => {
-      const itinerario = await tx.itinerario.findUnique({
-        where: { id_viaje },
-      });
-      if (itinerario) {
-        await tx.actividadItinerario.deleteMany({
-          where: {
-            dias_itinerario: { id_itinerario: itinerario.id_itinerario },
-          },
-        });
-        await tx.diaItinerario.deleteMany({
-          where: { id_itinerario: itinerario.id_itinerario },
-        });
-        await tx.cambioItinerario.deleteMany({
-          where: { id_itinerario: itinerario.id_itinerario },
-        });
-        await tx.itinerario.delete({ where: { id_viaje } });
-      }
-
-      await tx.gastoEstimado.deleteMany({ where: { id_viaje } });
-      await tx.presupuesto.deleteMany({ where: { id_viaje } });
-      await tx.opcionVuelo.deleteMany({ where: { id_viaje } });
-      await tx.opcionAlojamiento.deleteMany({ where: { id_viaje } });
-      await tx.viajeInteres.deleteMany({ where: { id_viaje } });
-
-      await tx.viaje.delete({ where: { id_viaje } });
-    });
+    await this.prisma.$transaction((tx) =>
+      ViajesService.cascadeDeleteEnTx(tx, id_viaje),
+    );
 
     return { message: 'Viaje eliminado correctamente' };
+  }
+
+  /**
+   * Borra un viaje y TODAS sus tablas dependientes dentro de una transacción
+   * ya abierta. Cascade manual: el schema usa `onDelete: NoAction`, así que hay
+   * que borrar los hijos antes que el padre. No valida ownership (lo hace quien
+   * llama). Reutilizado por `remove` y por el borrado de cuenta del usuario.
+   */
+  static async cascadeDeleteEnTx(tx: Tx, id_viaje: number): Promise<void> {
+    const itinerario = await tx.itinerario.findUnique({ where: { id_viaje } });
+    if (itinerario) {
+      await tx.actividadItinerario.deleteMany({
+        where: { dias_itinerario: { id_itinerario: itinerario.id_itinerario } },
+      });
+      await tx.diaItinerario.deleteMany({
+        where: { id_itinerario: itinerario.id_itinerario },
+      });
+      await tx.cambioItinerario.deleteMany({
+        where: { id_itinerario: itinerario.id_itinerario },
+      });
+      await tx.itinerario.delete({ where: { id_viaje } });
+    }
+
+    await tx.gastoEstimado.deleteMany({ where: { id_viaje } });
+    await tx.presupuesto.deleteMany({ where: { id_viaje } });
+    await tx.opcionVuelo.deleteMany({ where: { id_viaje } });
+    await tx.opcionAlojamiento.deleteMany({ where: { id_viaje } });
+    await tx.viajeInteres.deleteMany({ where: { id_viaje } });
+
+    await tx.viaje.delete({ where: { id_viaje } });
   }
 }

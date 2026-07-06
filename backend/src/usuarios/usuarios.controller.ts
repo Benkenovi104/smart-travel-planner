@@ -20,6 +20,7 @@ import { UsuariosService } from './usuarios.service.js';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto.js';
 import { UpsertPerfilDto } from './dto/upsert-perfil.dto.js';
 import { AddInteresDto } from './dto/add-interes.dto.js';
+import { DeleteAccountDto } from './dto/delete-account.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 
 @ApiTags('Usuarios')
@@ -73,5 +74,15 @@ export class UsuariosController {
     @Param('idInteres', ParseIntPipe) idInteres: number,
   ) {
     return this.usuariosService.removeInteres(req.user.id_usuario, idInteres);
+  }
+
+  @Delete('me')
+  @ApiOperation({
+    summary: 'Eliminar mi cuenta (requiere confirmar con la contraseña actual)',
+  })
+  @ApiResponse({ status: 200, description: 'Cuenta eliminada.' })
+  @ApiResponse({ status: 401, description: 'Contraseña incorrecta.' })
+  deleteMe(@Request() req, @Body() dto: DeleteAccountDto) {
+    return this.usuariosService.deleteMe(req.user.id_usuario, dto.password);
   }
 }

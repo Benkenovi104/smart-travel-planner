@@ -14,6 +14,8 @@ model Usuario {
   email             String           @unique @db.VarChar
   password_hash     String           @db.VarChar
   fecha_registro    DateTime?        @db.Timestamp(6)
+  reset_token_hash  String?          @db.VarChar
+  reset_token_expira DateTime?       @db.Timestamp(6)
   perfil_viajero    PerfilViajero?
   usuario_intereses UsuarioInteres[]
   viajes            Viaje[]
@@ -194,7 +196,7 @@ model OpcionAlojamiento {
   tipo             String?  @db.VarChar
   direccion        String?  @db.VarChar
   precio_por_noche Decimal? @db.Decimal(12, 2)
-  rating           Decimal? @db.Decimal(3, 2)
+  rating           Decimal? @db.Decimal(4, 2)
   latitud          Decimal? @db.Decimal(10, 7)
   longitud         Decimal? @db.Decimal(10, 7)
   url_referencia   String?  @db.VarChar

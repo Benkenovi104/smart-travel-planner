@@ -31,10 +31,25 @@ interface FlightItinerary {
 const BASE_URL = 'https://sky-scrapper.p.rapidapi.com/api/v1/flights';
 const HOST = 'sky-scrapper.p.rapidapi.com';
 
+// Datos fixture para el modo mock (RAPIDAPI_MOCK=true): evita quemar cuota del
+// free tier de RapidAPI. Basados en resultados reales de Buenos Aires <-> Mendoza.
+const VUELOS_MOCK: { aerolinea: string; precio: number; duracionMinutos: number }[] =
+  [
+    { aerolinea: 'Flybondi', precio: 87, duracionMinutos: 105 },
+    { aerolinea: 'JetSmart', precio: 94, duracionMinutos: 110 },
+    { aerolinea: 'Aerolíneas Argentinas', precio: 132, duracionMinutos: 100 },
+    { aerolinea: 'Flybondi', precio: 145, duracionMinutos: 115 },
+    { aerolinea: 'Aerolíneas Argentinas', precio: 168, duracionMinutos: 95 },
+  ];
+
 @Injectable()
 export class SkyScrapperService {
   private readonly logger = new Logger(SkyScrapperService.name);
   private readonly apiKey = process.env.RAPIDAPI_KEY!;
+
+  private get mock(): boolean {
+    return process.env.RAPIDAPI_MOCK === 'true';
+  }
 
   private headers() {
     return { 'X-RapidAPI-Key': this.apiKey, 'X-RapidAPI-Host': HOST };
@@ -43,8 +58,21 @@ export class SkyScrapperService {
   async resolverAeropuerto(
     nombre: string,
   ): Promise<{ skyId: string; entityId: string } | null> {
+    // searchAirport degrada con strings tipo "Ciudad, País": el sufijo de país
+    // hace que matchee el aeropuerto principal del país en vez del de la ciudad
+    // (ej: "Mendoza, Argentina" -> Buenos Aires). Nos quedamos solo con la
+    // ciudad, igual que hace google-places.service para el campo `ciudad`.
+    const ciudad = nombre.split(',')[0].trim();
+
+    // En modo mock devolvemos la ciudad como skyId (buscarVuelos la usa como
+    // origen/destino legible) sin pegarle a la API.
+    if (this.mock) {
+      this.logger.warn(`[MOCK] resolverAeropuerto("${nombre}") -> ${ciudad}`);
+      return { skyId: ciudad, entityId: 'MOCK' };
+    }
+
     const url = new URL(`${BASE_URL}/searchAirport`);
-    url.searchParams.set('query', nombre);
+    url.searchParams.set('query', ciudad);
 
     const res = await fetch(url, { headers: this.headers() });
     if (!res.ok) {
@@ -70,6 +98,20 @@ export class SkyScrapperService {
     fecha: string;
     adultos: number;
   }): Promise<VueloOpcion[]> {
+    if (this.mock) {
+      this.logger.warn(
+        `[MOCK] buscarVuelos ${params.origen.skyId} -> ${params.destino.skyId} (${VUELOS_MOCK.length} opciones fixture)`,
+      );
+      return VUELOS_MOCK.map((v) => ({
+        origen: params.origen.skyId,
+        destino: params.destino.skyId,
+        fecha: params.fecha,
+        aerolinea: v.aerolinea,
+        precio: v.precio,
+        duracionMinutos: v.duracionMinutos,
+      }));
+    }
+
     const url = new URL(`${BASE_URL}/searchFlights`);
     url.searchParams.set('originSkyId', params.origen.skyId);
     url.searchParams.set('destinationSkyId', params.destino.skyId);
