@@ -1,98 +1,94 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Smart Travel Planner — Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+API REST del [Smart Travel Planner](../README.md), construida con NestJS 11 y Prisma 7 sobre PostgreSQL (Supabase). Expone autenticación, perfil de viajero, gestión de viajes y generación/edición de itinerarios asistida por IA (Google Gemini).
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Stack
 
-## Description
+| Capa | Tecnología |
+|---|---|
+| Framework | NestJS 11 (Node.js / TypeScript, ESM) |
+| Base de datos | PostgreSQL (Supabase) vía Prisma 7 con `@prisma/adapter-pg` |
+| Auth | Passport + JWT (`@nestjs/jwt`, `passport-jwt`), bcrypt |
+| IA | Google Gemini (`@google/genai`) para generación de itinerarios |
+| Lugares reales | Google Places API (New) — Text Search, para fundamentar los itinerarios en POIs verificados |
+| Vuelos y alojamiento | RapidAPI — Sky Scrapper (vuelos) y Booking.com/`booking-com15` (alojamiento) |
+| Docs | Swagger (`@nestjs/swagger`) |
+| Rate limiting | `@nestjs/throttler` |
+| Validación | `class-validator` / `class-transformer` |
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Project setup
+## Instalación
 
 ```bash
-$ npm install
+npm install
+cp .env.example .env   # completar variables, ver tabla abajo
+npx prisma generate
+npx prisma migrate deploy   # o "migrate dev" si es la primera vez y no existe la migración en la DB
+npm run start:dev
 ```
 
-## Compile and run the project
+El servidor arranca en `http://localhost:3000` con prefijo global `/api`. La app **valida las variables de entorno al bootstrap**: si falta alguna requerida, no arranca y tira un error explicando cuál falta.
 
-```bash
-# development
-$ npm run start
+## Variables de entorno
 
-# watch mode
-$ npm run start:dev
+| Variable | Requerida | Descripción |
+|---|---|---|
+| `DATABASE_URL` | Sí | Connection string de Postgres (Supabase, Session Pooler recomendado). |
+| `JWT_SECRET` | Sí | Secreto para firmar JWT. Mínimo 32 caracteres. |
+| `GEMINI_API_KEY` | Sí | API key de Google Gemini, usada para generar itinerarios. |
+| `GOOGLE_PLACES_API_KEY` | Sí | API key con "Places API (New)" habilitada en Google Cloud (requiere billing habilitado en el proyecto, aunque no debería cobrar en este volumen). Usada para buscar lugares turísticos reales. |
+| `RAPIDAPI_KEY` | Sí | API key de RapidAPI, con suscripción (free tier) a "Sky Scrapper" (vuelos) y "Booking COM" (`booking-com15`, alojamiento). |
+| `PORT` | No | Puerto del servidor (default `3000`). |
+| `FRONTEND_URL` | No | Origen permitido por CORS (default `http://localhost:3001`). |
+| `NODE_ENV` | No | `development` \| `production` \| `test`. |
+| `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` | No | Reservadas para una futura integración directa con el SDK de Supabase (auth/storage). Hoy la app solo usa `DATABASE_URL` para hablarle a Postgres; estas variables no se leen todavía en el código. |
 
-# production mode
-$ npm run start:prod
-```
+## Scripts disponibles
 
-## Run tests
+| Comando | Descripción |
+|---|---|
+| `npm run start:dev` | Servidor en modo desarrollo (watch). |
+| `npm run start:prod` | Servidor en modo producción (requiere `npm run build` antes). |
+| `npm run build` | Compila a `dist/`. |
+| `npm run seed` | Carga el catálogo de intereses turísticos en la base. |
+| `npm run test` | Tests unitarios (Jest, ESM). |
+| `npm run test:e2e` | Tests end-to-end — bootstrapean la `AppModule` real y pegan contra la base configurada en `.env`. |
+| `npm run test:cov` | Tests unitarios con cobertura. |
+| `npm run lint` | ESLint con `--fix`. |
+| `npm run format` | Prettier sobre `src` y `test`. |
 
-```bash
-# unit tests
-$ npm run test
+## Documentación interactiva
 
-# e2e tests
-$ npm run test:e2e
+Con el servidor corriendo:
 
-# test coverage
-$ npm run test:cov
-```
+- **Swagger UI**: `http://localhost:3000/api/docs` — todos los endpoints, DTOs y respuestas documentados, con soporte de Bearer auth para probar endpoints protegidos.
+- **Health check**: `http://localhost:3000/api/health` — verifica que el servidor y la conexión a la base estén vivos.
 
-## Deployment
+## Módulos y endpoints principales
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+| Módulo | Rutas base | Qué hace |
+|---|---|---|
+| `auth` | `POST /api/auth/register`, `POST /api/auth/login` | Registro/login con JWT (bcrypt, 7 días de expiración). Rate limit de 5 intentos/minuto. |
+| `usuarios` | `/api/usuarios/*` | Perfil propio, perfil de viajero (ritmo, presupuesto, tipo), catálogo e intereses generales del usuario. |
+| `viajes` | `/api/viajes/*` | CRUD de viajes, scopeado por usuario, con intereses específicos por viaje. |
+| `itinerarios` | `/api/viajes/:idViaje/itinerario/*` | Generación de itinerario con IA (Gemini), consulta, y edición manual: agregar/editar/eliminar/mover actividades entre días, con historial de cambios (`GET .../cambios`). |
+| `presupuestos` | `GET /api/viajes/:idViaje/presupuesto` | Desglose de presupuesto por categoría + detalle de gastos, recalculado automáticamente en cada mutación del itinerario. |
+| `lugares` | `GET /api/lugares/buscar` | Búsqueda de lugares turísticos reales (Google Places), cacheados en la tabla `lugares` y reutilizados como contexto al generar itinerarios. |
+| `vuelos` | `/api/viajes/:idViaje/vuelos/*` | Búsqueda de opciones de vuelo reales (Sky Scrapper, ida y vuelta combinadas), guardadas en `opciones_vuelo` ordenadas por precio. |
+| `alojamiento` | `/api/viajes/:idViaje/alojamiento/*` | Búsqueda de opciones de alojamiento reales (Booking.com), guardadas en `opciones_alojamiento` ordenadas por precio por noche. |
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+Todos los endpoints salvo `auth` y `health` requieren `Authorization: Bearer <token>` (`JwtAuthGuard`).
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
+> Nota: los datos de vuelos/alojamiento vienen de mirrors no oficiales de Skyscanner y Booking.com en RapidAPI — son informativos/de simulación (como aclara el README raíz del proyecto), no hay integración de reserva real.
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## Base de datos
 
-## Resources
+El schema de Prisma (`prisma/schema.prisma`) modela usuarios, perfil de viajero, intereses, viajes, itinerarios, días, lugares, actividades, presupuesto y opciones de vuelo/alojamiento. Las migraciones viven en `prisma/migrations/`. El cliente generado va a `generated/prisma` (gitignoreado, se regenera con `npx prisma generate`).
 
-Check out a few resources that may come in handy when working with NestJS:
+> Nota: el schema usa `onDelete: NoAction` en todas las relaciones — los borrados en cascada (viaje → itinerario → días → actividades, etc.) se manejan explícitamente en los services dentro de transacciones, no a nivel de base de datos.
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+## Estado del proyecto
 
-## Support
+Este backend se está completando en bloques de trabajo incrementales. Para el detalle de qué está implementado, qué falta y en qué orden se está trabajando, ver:
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- [`ESTADO_BACKEND.md`](./ESTADO_BACKEND.md) — análisis completo del estado actual.
+- [`PENDIENTES_BACKEND.md`](./PENDIENTES_BACKEND.md) — checklist de trabajo pendiente, en el orden acordado.

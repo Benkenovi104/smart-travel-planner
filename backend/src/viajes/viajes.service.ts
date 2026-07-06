@@ -82,11 +82,17 @@ export class ViajesService {
       where: { id_viaje },
       data: {
         ...(data.origen && { origen: data.origen }),
-        ...(data.destino_principal && { destino_principal: data.destino_principal }),
+        ...(data.destino_principal && {
+          destino_principal: data.destino_principal,
+        }),
         ...(data.fecha_inicio && { fechaInicio: new Date(data.fecha_inicio) }),
         ...(data.fecha_fin && { fechaFin: new Date(data.fecha_fin) }),
-        ...(data.cantidad_personas !== undefined && { cantidadPersonas: data.cantidad_personas }),
-        ...(data.presupuesto_total !== undefined && { presupuestoTotal: data.presupuesto_total }),
+        ...(data.cantidad_personas !== undefined && {
+          cantidadPersonas: data.cantidad_personas,
+        }),
+        ...(data.presupuesto_total !== undefined && {
+          presupuestoTotal: data.presupuesto_total,
+        }),
         ...(data.estado && { estado: data.estado }),
         ...(intereses && {
           viaje_intereses: {
@@ -102,7 +108,36 @@ export class ViajesService {
   async remove(id_usuario: number, id_viaje: number) {
     await this.findOne(id_usuario, id_viaje);
 
-    await this.prisma.viaje.delete({ where: { id_viaje } });
+    // Cascade manual: no hay onDelete cascade en el schema, así que hay que
+    // borrar todas las tablas dependientes de "viajes" antes que el padre.
+    await this.prisma.$transaction(async (tx) => {
+      const itinerario = await tx.itinerario.findUnique({
+        where: { id_viaje },
+      });
+      if (itinerario) {
+        await tx.actividadItinerario.deleteMany({
+          where: {
+            dias_itinerario: { id_itinerario: itinerario.id_itinerario },
+          },
+        });
+        await tx.diaItinerario.deleteMany({
+          where: { id_itinerario: itinerario.id_itinerario },
+        });
+        await tx.cambioItinerario.deleteMany({
+          where: { id_itinerario: itinerario.id_itinerario },
+        });
+        await tx.itinerario.delete({ where: { id_viaje } });
+      }
+
+      await tx.gastoEstimado.deleteMany({ where: { id_viaje } });
+      await tx.presupuesto.deleteMany({ where: { id_viaje } });
+      await tx.opcionVuelo.deleteMany({ where: { id_viaje } });
+      await tx.opcionAlojamiento.deleteMany({ where: { id_viaje } });
+      await tx.viajeInteres.deleteMany({ where: { id_viaje } });
+
+      await tx.viaje.delete({ where: { id_viaje } });
+    });
+
     return { message: 'Viaje eliminado correctamente' };
   }
 }

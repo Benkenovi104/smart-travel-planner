@@ -1,4 +1,8 @@
-import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { GoogleGenAI } from '@google/genai';
 
 export interface ActividadIA {
@@ -12,6 +16,8 @@ export interface ActividadIA {
   costo_estimado: number;
   duracion_minutos: number;
   descripcion: string;
+  latitud: number;
+  longitud: number;
 }
 
 export interface DiaIA {
@@ -44,8 +50,31 @@ export class GeminiService {
     intereses: string[];
     tipo_viajero?: string;
     ritmo_preferido?: string;
+    lugares_disponibles?: {
+      nombre: string;
+      ciudad: string;
+      categoria: string;
+      latitud?: number;
+      longitud?: number;
+    }[];
   }): Promise<ItinerarioIA> {
-    const duracionDias = this.calcularDias(params.fecha_inicio, params.fecha_fin);
+    const duracionDias = this.calcularDias(
+      params.fecha_inicio,
+      params.fecha_fin,
+    );
+
+    const listaLugares = params.lugares_disponibles?.length
+      ? `\nLUGARES REALES DISPONIBLES EN ${params.destino.toUpperCase()} (coordenadas ya verificadas, usalos como base):\n${params.lugares_disponibles
+          .map(
+            (l) =>
+              `- ${l.nombre} (${l.categoria}), ${l.ciudad}${
+                l.latitud !== undefined && l.longitud !== undefined
+                  ? ` [${l.latitud}, ${l.longitud}]`
+                  : ''
+              }`,
+          )
+          .join('\n')}\n`
+      : '';
 
     const prompt = `Eres un experto planificador de viajes. Genera un itinerario detallado para el siguiente viaje.
 
@@ -58,15 +87,21 @@ DATOS DEL VIAJE:
 - Intereses: ${params.intereses.length > 0 ? params.intereses.join(', ') : 'general'}
 ${params.tipo_viajero ? `- Tipo de viajero: ${params.tipo_viajero}` : ''}
 ${params.ritmo_preferido ? `- Ritmo preferido: ${params.ritmo_preferido}` : ''}
-
+${listaLugares}
 INSTRUCCIONES:
 - Genera exactamente ${duracionDias} días de actividades
 - Incluye 3-5 actividades por día
 - Las actividades deben ser reales y existentes en ${params.destino}
+${
+  params.lugares_disponibles?.length
+    ? '- Priorizá los lugares de la lista "LUGARES REALES DISPONIBLES" cuando encajen con los intereses del viaje, usando exactamente su nombre, ciudad y coordenadas. Si necesitás completar el itinerario con algo que no está en la lista (traslados, alojamiento, comidas genéricas), podés agregarlo con tu propio conocimiento del destino.'
+    : ''
+}
 - Considera el presupuesto total (USD ${params.presupuesto_total} para ${params.cantidad_personas} personas)
 - Adapta el itinerario a los intereses indicados
 - Incluye horarios realistas (considera tiempos de traslado)
 - Incluye una mezcla de actividades: cultura, gastronomía, actividades principales
+- Para cada lugar, incluí sus coordenadas geográficas reales aproximadas (latitud/longitud) según tu conocimiento del destino, o las provistas en la lista si el lugar viene de ahí
 
 Responde ÚNICAMENTE con un JSON válido con esta estructura exacta, sin texto adicional:
 {
@@ -86,7 +121,9 @@ Responde ÚNICAMENTE con un JSON válido con esta estructura exacta, sin texto a
           "hora_fin": "11:00",
           "costo_estimado": 20,
           "duracion_minutos": 120,
-          "descripcion": "Descripción breve de la actividad"
+          "descripcion": "Descripción breve de la actividad",
+          "latitud": 48.8606,
+          "longitud": 2.3376
         }
       ]
     }
@@ -109,7 +146,9 @@ Responde ÚNICAMENTE con un JSON válido con esta estructura exacta, sin texto a
       return JSON.parse(text) as ItinerarioIA;
     } catch (error) {
       this.logger.error('Error al generar itinerario con Gemini', error);
-      throw new InternalServerErrorException('No se pudo generar el itinerario. Intenta nuevamente.');
+      throw new InternalServerErrorException(
+        'No se pudo generar el itinerario. Intenta nuevamente.',
+      );
     }
   }
 

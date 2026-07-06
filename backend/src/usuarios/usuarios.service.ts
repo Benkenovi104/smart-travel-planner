@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto.js';
 import { UpsertPerfilDto } from './dto/upsert-perfil.dto.js';
@@ -56,9 +60,15 @@ export class UsuariosService {
         tipoViajero: dto.tipo_viajero,
       },
       update: {
-        ...(dto.ritmo_preferido !== undefined && { ritmoPreferido: dto.ritmo_preferido }),
-        ...(dto.presupuesto_preferido !== undefined && { presupuesto_preferido: dto.presupuesto_preferido }),
-        ...(dto.tipo_viajero !== undefined && { tipoViajero: dto.tipo_viajero }),
+        ...(dto.ritmo_preferido !== undefined && {
+          ritmoPreferido: dto.ritmo_preferido,
+        }),
+        ...(dto.presupuesto_preferido !== undefined && {
+          presupuesto_preferido: dto.presupuesto_preferido,
+        }),
+        ...(dto.tipo_viajero !== undefined && {
+          tipoViajero: dto.tipo_viajero,
+        }),
       },
       select: {
         ritmoPreferido: true,
@@ -85,12 +95,18 @@ export class UsuariosService {
     if (!existe) throw new NotFoundException('Interés no encontrado');
 
     const yaAgregado = await this.prisma.usuarioInteres.findUnique({
-      where: { id_usuario_id_interes: { id_usuario, id_interes: dto.id_interes } },
+      where: {
+        id_usuario_id_interes: { id_usuario, id_interes: dto.id_interes },
+      },
     });
     if (yaAgregado) throw new ConflictException('El interés ya está agregado');
 
     return this.prisma.usuarioInteres.create({
-      data: { id_usuario, id_interes: dto.id_interes, prioridad: dto.prioridad },
+      data: {
+        id_usuario,
+        id_interes: dto.id_interes,
+        prioridad: dto.prioridad,
+      },
       select: {
         prioridad: true,
         intereses: { select: { id_interes: true, nombre: true } },

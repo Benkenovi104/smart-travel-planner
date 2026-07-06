@@ -8,7 +8,10 @@ export class AddInteresDto {
   @Type(() => Number)
   id_interes: number;
 
-  @ApiPropertyOptional({ example: 1, description: 'Prioridad del 1 (alta) al 5 (baja)' })
+  @ApiPropertyOptional({
+    example: 1,
+    description: 'Prioridad del 1 (alta) al 5 (baja)',
+  })
   @IsOptional()
   @IsInt()
   @Min(1)

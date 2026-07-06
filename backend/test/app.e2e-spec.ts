@@ -16,10 +16,16 @@ describe('AppController (e2e)', () => {
     await app.init();
   });
 
-  it('/ (GET)', () => {
-    return request(app.getHttpServer())
-      .get('/')
-      .expect(200)
-      .expect('Hello World!');
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it('/health (GET)', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/health')
+      .expect(200);
+    const body = response.body as { status: string; timestamp: string };
+    expect(body).toMatchObject({ status: 'ok' });
+    expect(body.timestamp).toEqual(expect.any(String));
   });
 });
