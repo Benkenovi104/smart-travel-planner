@@ -1,0 +1,48 @@
+# Stack de desarrollo: Postgres local + backend, sin depender de Supabase.
+# Uso:  docker compose up --build
+# El backend necesita un .env con las API keys (GEMINI_API_KEY, GOOGLE_PLACES_API_KEY,
+# RAPIDAPI_KEY, JWT_SECRET, SMTP_*). DATABASE_URL se ignora del .env: acá se
+# sobreescribe para apuntar al Postgres del contenedor.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: smart_travel
+    ports:
+      - '${DB_PORT:-5433}:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d smart_travel']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      # Apunta al Postgres local del compose (pisa el DATABASE_URL del .env)
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/smart_travel
+      NODE_ENV: development
+      PORT: 3000
+    ports:
+      - '${BACKEND_PORT:-3000}:3000'
+    # En dev: sincroniza el schema y siembra los intereses antes de arrancar.
+    # (La imagen por defecto NO hace esto: solo arranca la app, prod-safe.)
+    command: >
+      sh -c "npx prisma db push --accept-data-loss &&
+             node dist/prisma/seed.js &&
+             node dist/src/main.js"
+
+volumes:
+  pgdata:
