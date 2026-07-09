@@ -130,4 +130,16 @@ export class ItinerariosController {
       idViaje,
     );
   }
+
+  @Post('geocodificar')
+  @ApiOperation({
+    summary:
+      'Geolocalizar (Nominatim/OSM) las actividades del itinerario sin coordenadas',
+  })
+  geocodificar(@Request() req, @Param('idViaje', ParseIntPipe) idViaje: number) {
+    return this.itinerariosService.geocodificarFaltantes(
+      req.user.id_usuario,
+      idViaje,
+    );
+  }
 }

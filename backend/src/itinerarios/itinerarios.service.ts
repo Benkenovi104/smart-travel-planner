@@ -10,6 +10,7 @@ import { Prisma, Lugar } from '../../generated/prisma/client.js';
 import { GeminiService } from './gemini.service.js';
 import { PresupuestosService } from '../presupuestos/presupuestos.service.js';
 import { LugaresService } from '../lugares/lugares.service.js';
+import { GeocodingService } from '../lugares/geocoding.service.js';
 import { CreateActividadDto } from './dto/create-actividad.dto.js';
 import { UpdateActividadDto } from './dto/update-actividad.dto.js';
 import { MoverActividadDto } from './dto/mover-actividad.dto.js';
@@ -25,6 +26,7 @@ export class ItinerariosService {
     private readonly gemini: GeminiService,
     private readonly presupuestos: PresupuestosService,
     private readonly lugares: LugaresService,
+    private readonly geocoding: GeocodingService,
   ) {}
 
   async generar(id_usuario: number, id_viaje: number) {
@@ -76,7 +78,48 @@ export class ItinerariosService {
       })),
     });
 
-    // Todas las escrituras se hacen en una única transacción: si algo falla
+    // Resolver los lugares ANTES de la transacción: son un caché compartido
+    // (Google Places / generaciones previas) y no necesitan ser atómicos con el
+    // itinerario. Hacerlo acá evita que N lookups+inserts contra Supabase (cada
+    // uno con latencia de red) agoten el presupuesto de tiempo de la transacción
+    // interactiva y disparen Prisma P2028.
+    const lugaresMap = new Map<string, number>();
+    for (const diaIA of itinerarioIA.dias) {
+      for (const actIA of diaIA.actividades) {
+        const key = `${actIA.nombre_lugar}|${actIA.ciudad}`;
+        if (!lugaresMap.has(key)) {
+          const existente = await this.prisma.lugar.findFirst({
+            where: {
+              nombre: { equals: actIA.nombre_lugar, mode: 'insensitive' },
+              ...(actIA.ciudad && {
+                ciudad: { equals: actIA.ciudad, mode: 'insensitive' },
+              }),
+            },
+          });
+
+          if (existente) {
+            lugaresMap.set(key, existente.id_lugar);
+          } else {
+            const lugar = await this.prisma.lugar.create({
+              data: {
+                nombre: actIA.nombre_lugar,
+                ciudad: actIA.ciudad,
+                pais: actIA.pais,
+                categoria: actIA.categoria,
+                precio_estimado: actIA.costo_estimado,
+                duracionEstimadaMin: actIA.duracion_minutos,
+                latitud: actIA.latitud ?? undefined,
+                longitud: actIA.longitud ?? undefined,
+                fuente_api: 'gemini',
+              },
+            });
+            lugaresMap.set(key, lugar.id_lugar);
+          }
+        }
+      }
+    }
+
+    // Las escrituras del itinerario van en una única transacción: si algo falla
     // a mitad de camino, no queda un itinerario a medio generar.
     await this.prisma.$transaction(
       async (tx) => {
@@ -100,45 +143,6 @@ export class ItinerariosService {
             where: { id_itinerario: itinerarioPrevio.id_itinerario },
           });
           await tx.itinerario.delete({ where: { id_viaje } });
-        }
-
-        // Crear lugares (reutilizando los ya cacheados por nombre+ciudad,
-        // ya sea de Google Places o de una generación anterior, antes de
-        // crear uno nuevo desde lo que haya devuelto Gemini)
-        const lugaresMap = new Map<string, number>();
-        for (const diaIA of itinerarioIA.dias) {
-          for (const actIA of diaIA.actividades) {
-            const key = `${actIA.nombre_lugar}|${actIA.ciudad}`;
-            if (!lugaresMap.has(key)) {
-              const existente = await tx.lugar.findFirst({
-                where: {
-                  nombre: { equals: actIA.nombre_lugar, mode: 'insensitive' },
-                  ...(actIA.ciudad && {
-                    ciudad: { equals: actIA.ciudad, mode: 'insensitive' },
-                  }),
-                },
-              });
-
-              if (existente) {
-                lugaresMap.set(key, existente.id_lugar);
-              } else {
-                const lugar = await tx.lugar.create({
-                  data: {
-                    nombre: actIA.nombre_lugar,
-                    ciudad: actIA.ciudad,
-                    pais: actIA.pais,
-                    categoria: actIA.categoria,
-                    precio_estimado: actIA.costo_estimado,
-                    duracionEstimadaMin: actIA.duracion_minutos,
-                    latitud: actIA.latitud ?? undefined,
-                    longitud: actIA.longitud ?? undefined,
-                    fuente_api: 'gemini',
-                  },
-                });
-                lugaresMap.set(key, lugar.id_lugar);
-              }
-            }
-          }
         }
 
         // Crear itinerario
@@ -169,10 +173,10 @@ export class ItinerariosService {
               )!,
               orden: idx + 1,
               hora_inicio_estimada: actIA.hora_inicio
-                ? new Date(`1970-01-01T${actIA.hora_inicio}:00`)
+                ? new Date(`1970-01-01T${actIA.hora_inicio}:00Z`)
                 : undefined,
               hora_fin_estimada: actIA.hora_fin
-                ? new Date(`1970-01-01T${actIA.hora_fin}:00`)
+                ? new Date(`1970-01-01T${actIA.hora_fin}:00Z`)
                 : undefined,
               tipo_actividad: actIA.tipo_actividad,
               costoEstimado: actIA.costo_estimado,
@@ -183,7 +187,7 @@ export class ItinerariosService {
 
         await this.presupuestos.recalcularConTx(tx, id_viaje);
       },
-      { timeout: 15_000 },
+      { timeout: 30_000, maxWait: 10_000 },
     );
 
     return this.getItinerario(id_usuario, id_viaje);
@@ -233,6 +237,18 @@ export class ItinerariosService {
       );
     }
 
+    // Si es un lugar nuevo (manual), intentamos geolocalizarlo ANTES de la
+    // transacción (la llamada de red va afuera de la tx) para que aparezca en
+    // el mapa. Si falla, no pasa nada: se guarda sin coordenadas.
+    const coordsManual =
+      !dto.id_lugar && dto.nombre_lugar
+        ? await this.geocoding.geocodificar(
+            dto.nombre_lugar,
+            dto.ciudad,
+            dto.pais,
+          )
+        : null;
+
     return this.prisma.$transaction(async (tx) => {
       const dia = await this.obtenerDia(tx, itinerario.id_itinerario, id_dia);
 
@@ -248,6 +264,8 @@ export class ItinerariosService {
             pais: dto.pais,
             categoria: dto.categoria,
             precio_estimado: dto.precio_estimado,
+            latitud: coordsManual?.latitud,
+            longitud: coordsManual?.longitud,
             fuente_api: 'manual',
           },
         });
@@ -274,10 +292,10 @@ export class ItinerariosService {
           id_lugar,
           orden,
           hora_inicio_estimada: dto.hora_inicio
-            ? new Date(`1970-01-01T${dto.hora_inicio}:00`)
+            ? new Date(`1970-01-01T${dto.hora_inicio}:00Z`)
             : undefined,
           hora_fin_estimada: dto.hora_fin
-            ? new Date(`1970-01-01T${dto.hora_fin}:00`)
+            ? new Date(`1970-01-01T${dto.hora_fin}:00Z`)
             : undefined,
           tipo_actividad: dto.tipo_actividad,
           costoEstimado: dto.costo_estimado,
@@ -324,10 +342,10 @@ export class ItinerariosService {
             tipo_actividad: dto.tipo_actividad,
           }),
           ...(dto.hora_inicio !== undefined && {
-            hora_inicio_estimada: new Date(`1970-01-01T${dto.hora_inicio}:00`),
+            hora_inicio_estimada: new Date(`1970-01-01T${dto.hora_inicio}:00Z`),
           }),
           ...(dto.hora_fin !== undefined && {
-            hora_fin_estimada: new Date(`1970-01-01T${dto.hora_fin}:00`),
+            hora_fin_estimada: new Date(`1970-01-01T${dto.hora_fin}:00Z`),
           }),
           ...(dto.costo_estimado !== undefined && {
             costoEstimado: dto.costo_estimado,
@@ -477,6 +495,63 @@ export class ItinerariosService {
       where: { id_itinerario: itinerario.id_itinerario },
       orderBy: { fecha_cambio: 'desc' },
     });
+  }
+
+  /**
+   * Geocodifica (Nominatim) los lugares del itinerario que todavía no tienen
+   * coordenadas, para que aparezcan en el mapa. Procesa en lotes chicos para
+   * ser respetuoso con la API pública. Devuelve cuántos se ubicaron.
+   */
+  async geocodificarFaltantes(id_usuario: number, id_viaje: number) {
+    const itinerario = await this.obtenerItinerarioVerificado(
+      id_usuario,
+      id_viaje,
+    );
+
+    const actividades = await this.prisma.actividadItinerario.findMany({
+      where: { dias_itinerario: { id_itinerario: itinerario.id_itinerario } },
+      include: { lugares: true },
+    });
+
+    // Lugares únicos sin coordenadas.
+    const pendientes = new Map<
+      number,
+      (typeof actividades)[number]['lugares']
+    >();
+    for (const act of actividades) {
+      const l = act.lugares;
+      if (l.latitud == null || l.longitud == null) {
+        pendientes.set(l.id_lugar, l);
+      }
+    }
+    const lugares = [...pendientes.values()];
+
+    let ubicados = 0;
+    const LOTE = 3;
+    for (let i = 0; i < lugares.length; i += LOTE) {
+      const lote = lugares.slice(i, i + LOTE);
+      const coords = await Promise.all(
+        lote.map((l) =>
+          this.geocoding.geocodificar(l.nombre, l.ciudad, l.pais),
+        ),
+      );
+      await Promise.all(
+        coords.map((c, j) => {
+          if (!c) return null;
+          ubicados++;
+          return this.prisma.lugar.update({
+            where: { id_lugar: lote[j].id_lugar },
+            data: { latitud: c.latitud, longitud: c.longitud },
+          });
+        }),
+      );
+      // Pausa entre lotes para no abusar de la API pública de Nominatim.
+      if (i + LOTE < lugares.length) {
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    }
+
+    return { total: lugares.length, ubicados };
   }
 
   private async obtenerItinerarioVerificado(
