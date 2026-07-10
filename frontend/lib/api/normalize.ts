@@ -7,6 +7,7 @@ import type {
   ActividadApi,
   CambioItinerarioApi,
   DiaItinerarioApi,
+  GastoEstimadoApi,
   ItinerarioApi,
   LugarApi,
   MeApi,
@@ -19,6 +20,7 @@ import type {
   Actividad,
   CambioItinerario,
   DiaItinerario,
+  GastoEstimado,
   Itinerario,
   Lugar,
   OpcionAlojamiento,
@@ -140,6 +142,15 @@ export function normalizeCambio(c: CambioItinerarioApi): CambioItinerario {
   };
 }
 
+export function normalizeGasto(g: GastoEstimadoApi): GastoEstimado {
+  return {
+    id: g.id_gasto,
+    categoria: g.categoria,
+    descripcion: g.descripcion,
+    monto: num(g.montoEstimado),
+  };
+}
+
 export function normalizePresupuesto(p: PresupuestoApi): Presupuesto {
   return {
     total: num(p.monto_total),
@@ -148,6 +159,7 @@ export function normalizePresupuesto(p: PresupuestoApi): Presupuesto {
     actividades: num(p.monto_actividades),
     comidas: num(p.monto_comidas),
     transporteLocal: num(p.monto_transporte_local),
+    gastos: (p.gastos_estimados ?? []).map(normalizeGasto),
   };
 }
 
@@ -163,6 +175,7 @@ export function normalizeVuelo(v: OpcionVueloApi): OpcionVuelo {
     moneda: v.moneda,
     duracionTotal: v.duracion_total,
     url: v.url_referencia,
+    seleccionado: v.seleccionado ?? false,
   };
 }
 
@@ -177,5 +190,6 @@ export function normalizeAlojamiento(a: OpcionAlojamientoApi): OpcionAlojamiento
     lat: num(a.latitud),
     lng: num(a.longitud),
     url: a.url_referencia,
+    seleccionado: a.seleccionado ?? false,
   };
 }

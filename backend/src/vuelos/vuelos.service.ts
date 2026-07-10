@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { SkyScrapperService } from './sky-scrapper.service.js';
+import { PresupuestosService } from '../presupuestos/presupuestos.service.js';
 
 const MAX_OPCIONES = 5;
 
@@ -14,6 +15,7 @@ export class VuelosService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly skyScrapper: SkyScrapperService,
+    private readonly presupuestos: PresupuestosService,
   ) {}
 
   async buscarYGuardar(id_usuario: number, id_viaje: number) {
@@ -79,10 +81,51 @@ export class VuelosService {
     });
 
     await this.prisma.$transaction(async (tx) => {
+      // Reemplazar las opciones descarta la que estuviera seleccionada, así que
+      // el presupuesto tiene que volver a calcularse sin ese vuelo.
       await tx.opcionVuelo.deleteMany({ where: { id_viaje } });
       if (opciones.length > 0) {
         await tx.opcionVuelo.createMany({ data: opciones });
       }
+      await this.presupuestos.recalcularConTx(tx, id_viaje);
+    });
+
+    return this.listar(id_usuario, id_viaje);
+  }
+
+  /**
+   * Elige (o descarta) una opción de vuelo. La selección es exclusiva por viaje
+   * y dispara el recálculo del presupuesto, que suma el vuelo elegido.
+   */
+  async seleccionar(
+    id_usuario: number,
+    id_viaje: number,
+    id_vuelo: number,
+    seleccionado: boolean,
+  ) {
+    const viaje = await this.prisma.viaje.findUnique({ where: { id_viaje } });
+    if (!viaje) throw new NotFoundException('Viaje no encontrado');
+    if (viaje.id_usuario !== id_usuario) throw new ForbiddenException();
+
+    const opcion = await this.prisma.opcionVuelo.findUnique({
+      where: { id_vuelo },
+    });
+    if (!opcion || opcion.id_viaje !== id_viaje) {
+      throw new NotFoundException('Opción de vuelo no encontrada');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      if (seleccionado) {
+        await tx.opcionVuelo.updateMany({
+          where: { id_viaje, seleccionado: true },
+          data: { seleccionado: false },
+        });
+      }
+      await tx.opcionVuelo.update({
+        where: { id_vuelo },
+        data: { seleccionado },
+      });
+      await this.presupuestos.recalcularConTx(tx, id_viaje);
     });
 
     return this.listar(id_usuario, id_viaje);

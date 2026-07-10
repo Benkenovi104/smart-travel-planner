@@ -20,12 +20,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
   DialogClose,
@@ -52,6 +47,9 @@ import { EstadoBadge } from '@/components/viajes/estado-badge';
 import { EditableItinerario } from '@/components/itinerario/editable-itinerario';
 import { HistorialCambios } from '@/components/itinerario/historial-cambios';
 import { MapaSection } from '@/components/mapa/mapa-section';
+import { PresupuestoSection } from '@/components/presupuesto/presupuesto-section';
+import { VuelosSection } from '@/components/reservas/vuelos-section';
+import { AlojamientoSection } from '@/components/reservas/alojamiento-section';
 import { useViaje, useEliminarViaje } from '@/lib/query/use-viajes';
 import { useItinerario, useGenerarItinerario } from '@/lib/query/use-itinerario';
 import { ApiError } from '@/lib/api/client';
@@ -231,93 +229,127 @@ export default function ViajeDetallePage() {
         </CardContent>
       </Card>
 
-      {/* Itinerario */}
-      <section className="space-y-4">
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="text-xl font-semibold">Itinerario</h2>
+      {/* Presupuesto, vuelos y alojamiento no dependen del itinerario, así que
+          los tabs se muestran siempre y cada uno resuelve su propio estado vacío. */}
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList>
+          <TabsTrigger value="itinerario">Itinerario</TabsTrigger>
+          <TabsTrigger value="mapa">Mapa</TabsTrigger>
+          <TabsTrigger value="presupuesto">Presupuesto</TabsTrigger>
+          <TabsTrigger value="vuelos">Vuelos</TabsTrigger>
+          <TabsTrigger value="alojamiento">Alojamiento</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="itinerario" className="space-y-3 pt-4">
           {itinerario.data && (
-            <div className="flex items-center gap-1">
-              <HistorialCambios idViaje={id} />
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm">
-                    <CalendarSearch className="size-4" />
-                    Ir a día
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  className="max-h-80 overflow-y-auto"
-                >
-                  {itinerario.data.dias.map((d) => (
-                    <DropdownMenuItem key={d.id} onSelect={() => irADia(d.id)}>
-                      Día {d.numeroDia} · {formatFecha(d.fecha)}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <RegenerarButton
-                pending={generar.isPending}
-                onConfirm={onGenerar}
-              />
-            </div>
-          )}
-        </div>
-
-        {itinerario.isLoading && (
-          <Skeleton className="h-48 w-full rounded-xl" />
-        )}
-
-        {sinItinerario && (
-          <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed py-16 text-center">
-            <Sparkles className="text-muted-foreground size-10" />
-            <div>
-              <p className="font-medium">Todavía no generaste el itinerario</p>
-              <p className="text-muted-foreground text-sm">
-                La IA arma un plan día por día según tu destino, fechas e
-                intereses.
-              </p>
-            </div>
-            <Button onClick={onGenerar} disabled={generar.isPending}>
-              {generar.isPending ? (
-                <Loader2 className="animate-spin" />
-              ) : (
-                <Sparkles className="size-4" />
-              )}
-              {generar.isPending ? 'Generando…' : 'Generar itinerario'}
-            </Button>
-          </div>
-        )}
-
-        {itinerario.isError && !sinItinerario && (
-          <p className="text-destructive text-sm">
-            No se pudo cargar el itinerario.
-          </p>
-        )}
-
-        {itinerario.data && (
-          <Tabs value={tab} onValueChange={setTab}>
-            <TabsList>
-              <TabsTrigger value="itinerario">Itinerario</TabsTrigger>
-              <TabsTrigger value="mapa">Mapa</TabsTrigger>
-            </TabsList>
-            <TabsContent value="itinerario" className="space-y-3 pt-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-muted-foreground text-sm">
                 Arrastrá las actividades para reordenarlas o moverlas de día.
               </p>
-              <EditableItinerario
-                itinerario={itinerario.data}
-                idViaje={id}
-                collapsed={collapsed}
-                onToggleCollapse={toggleCollapse}
-              />
-            </TabsContent>
-            <TabsContent value="mapa" className="pt-2">
-              <MapaSection itinerario={itinerario.data} idViaje={id} />
-            </TabsContent>
-          </Tabs>
+              <div className="flex items-center gap-1">
+                <HistorialCambios idViaje={id} />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm">
+                      <CalendarSearch className="size-4" />
+                      Ir a día
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    className="max-h-80 overflow-y-auto"
+                  >
+                    {itinerario.data.dias.map((d) => (
+                      <DropdownMenuItem key={d.id} onSelect={() => irADia(d.id)}>
+                        Día {d.numeroDia} · {formatFecha(d.fecha)}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <RegenerarButton
+                  pending={generar.isPending}
+                  onConfirm={onGenerar}
+                />
+              </div>
+            </div>
+          )}
+
+          {itinerario.isLoading && (
+            <Skeleton className="h-48 w-full rounded-xl" />
+          )}
+
+          {sinItinerario && <GenerarItinerarioCTA onGenerar={onGenerar} pending={generar.isPending} />}
+
+          {itinerario.isError && !sinItinerario && (
+            <p className="text-destructive text-sm">
+              No se pudo cargar el itinerario.
+            </p>
+          )}
+
+          {itinerario.data && (
+            <EditableItinerario
+              itinerario={itinerario.data}
+              idViaje={id}
+              collapsed={collapsed}
+              onToggleCollapse={toggleCollapse}
+            />
+          )}
+        </TabsContent>
+
+        <TabsContent value="mapa" className="pt-4">
+          {itinerario.data ? (
+            <MapaSection itinerario={itinerario.data} idViaje={id} />
+          ) : sinItinerario ? (
+            <GenerarItinerarioCTA
+              onGenerar={onGenerar}
+              pending={generar.isPending}
+              texto="El mapa se arma con las actividades del itinerario."
+            />
+          ) : (
+            <Skeleton className="h-[520px] w-full rounded-xl" />
+          )}
+        </TabsContent>
+
+        <TabsContent value="presupuesto" className="pt-4">
+          <PresupuestoSection idViaje={id} viaje={viaje} />
+        </TabsContent>
+
+        <TabsContent value="vuelos" className="pt-4">
+          <VuelosSection idViaje={id} />
+        </TabsContent>
+
+        <TabsContent value="alojamiento" className="pt-4">
+          <AlojamientoSection idViaje={id} viaje={viaje} />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function GenerarItinerarioCTA({
+  onGenerar,
+  pending,
+  texto = 'La IA arma un plan día por día según tu destino, fechas e intereses.',
+}: {
+  onGenerar: () => void;
+  pending: boolean;
+  texto?: string;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed py-16 text-center">
+      <Sparkles className="text-muted-foreground size-10" />
+      <div>
+        <p className="font-medium">Todavía no generaste el itinerario</p>
+        <p className="text-muted-foreground text-sm">{texto}</p>
+      </div>
+      <Button onClick={onGenerar} disabled={pending}>
+        {pending ? (
+          <Loader2 className="animate-spin" />
+        ) : (
+          <Sparkles className="size-4" />
         )}
-      </section>
+        {pending ? 'Generando…' : 'Generar itinerario'}
+      </Button>
     </div>
   );
 }

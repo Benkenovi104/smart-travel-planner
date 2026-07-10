@@ -1,6 +1,8 @@
 import {
+  Body,
   Controller,
   Post,
+  Patch,
   Get,
   Param,
   ParseIntPipe,
@@ -14,6 +16,7 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 import { AlojamientoService } from './alojamiento.service.js';
+import { SeleccionarAlojamientoDto } from './dto/seleccionar-alojamiento.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 
 @ApiTags('Alojamiento')
@@ -34,6 +37,29 @@ export class AlojamientoController {
   })
   buscar(@Request() req, @Param('idViaje', ParseIntPipe) idViaje: number) {
     return this.alojamientoService.buscarYGuardar(req.user.id_usuario, idViaje);
+  }
+
+  @Patch(':idAlojamiento/seleccionar')
+  @ApiOperation({
+    summary:
+      'Elegir (o descartar) una opción de alojamiento. Es exclusiva por viaje y recalcula el presupuesto',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Opción de alojamiento no encontrada.',
+  })
+  seleccionar(
+    @Request() req,
+    @Param('idViaje', ParseIntPipe) idViaje: number,
+    @Param('idAlojamiento', ParseIntPipe) idAlojamiento: number,
+    @Body() dto: SeleccionarAlojamientoDto,
+  ) {
+    return this.alojamientoService.seleccionar(
+      req.user.id_usuario,
+      idViaje,
+      idAlojamiento,
+      dto.seleccionado,
+    );
   }
 
   @Get()

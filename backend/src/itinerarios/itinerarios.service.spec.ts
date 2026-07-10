@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { GeminiService } from './gemini.service.js';
 import { PresupuestosService } from '../presupuestos/presupuestos.service.js';
 import { LugaresService } from '../lugares/lugares.service.js';
+import { GeocodingService } from '../lugares/geocoding.service.js';
 
 describe('ItinerariosService', () => {
   let service: ItinerariosService;
@@ -23,6 +24,7 @@ describe('ItinerariosService', () => {
         { provide: GeminiService, useValue: { generarItinerario: jest.fn() } },
         { provide: PresupuestosService, useValue: { recalcularConTx: jest.fn() } },
         { provide: LugaresService, useValue: { buscarYCachear: jest.fn() } },
+        { provide: GeocodingService, useValue: { geocodificar: jest.fn() } },
       ],
     }).compile();
     service = module.get<ItinerariosService>(ItinerariosService);

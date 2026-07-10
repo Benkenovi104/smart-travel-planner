@@ -132,6 +132,13 @@ export interface CambioItinerarioApi {
 }
 
 // ---------- Presupuesto ----------
+export interface GastoEstimadoApi {
+  id_gasto: number;
+  categoria: string | null;
+  descripcion: string | null;
+  montoEstimado: string | null; // camelCase
+}
+
 export interface PresupuestoApi {
   monto_total: string | null;
   monto_vuelos: string | null;
@@ -139,6 +146,7 @@ export interface PresupuestoApi {
   monto_actividades: string | null;
   monto_comidas: string | null;
   monto_transporte_local: string | null;
+  gastos_estimados: GastoEstimadoApi[];
 }
 
 // ---------- Transporte ----------
@@ -153,6 +161,7 @@ export interface OpcionVueloApi {
   moneda: string | null;
   duracion_total: number | null;
   url_referencia: string | null;
+  seleccionado: boolean;
 }
 
 export interface OpcionAlojamientoApi {
@@ -165,4 +174,5 @@ export interface OpcionAlojamientoApi {
   latitud: string | null;
   longitud: string | null;
   url_referencia: string | null;
+  seleccionado: boolean;
 }

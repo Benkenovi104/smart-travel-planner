@@ -94,9 +94,10 @@ INSTRUCCIONES:
 - Las actividades deben ser reales y existentes en ${params.destino}
 ${
   params.lugares_disponibles?.length
-    ? '- Priorizá los lugares de la lista "LUGARES REALES DISPONIBLES" cuando encajen con los intereses del viaje, usando exactamente su nombre, ciudad y coordenadas. Si necesitás completar el itinerario con algo que no está en la lista (traslados, alojamiento, comidas genéricas), podés agregarlo con tu propio conocimiento del destino.'
+    ? '- Priorizá los lugares de la lista "LUGARES REALES DISPONIBLES" cuando encajen con los intereses del viaje, usando exactamente su nombre, ciudad y coordenadas. Si necesitás completar el itinerario con algo que no está en la lista (traslados, comidas genéricas), podés agregarlo con tu propio conocimiento del destino.'
     : ''
 }
+- NO incluyas alojamiento ni hoteles: el usuario elige su hotel por separado y su costo se suma aparte
 - Considera el presupuesto total (USD ${params.presupuesto_total} para ${params.cantidad_personas} personas)
 - Adapta el itinerario a los intereses indicados
 - Incluye horarios realistas (considera tiempos de traslado)
@@ -115,8 +116,8 @@ Responde ÚNICAMENTE con un JSON válido con esta estructura exacta, sin texto a
           "nombre_lugar": "Nombre del lugar",
           "ciudad": "Ciudad",
           "pais": "País",
-          "categoria": "museo|restaurante|parque|monumento|hotel|transporte|otro",
-          "tipo_actividad": "visita|comida|transporte|alojamiento|entretenimiento",
+          "categoria": "museo|restaurante|parque|monumento|transporte|otro",
+          "tipo_actividad": "visita|comida|transporte|entretenimiento",
           "hora_inicio": "09:00",
           "hora_fin": "11:00",
           "costo_estimado": 20,

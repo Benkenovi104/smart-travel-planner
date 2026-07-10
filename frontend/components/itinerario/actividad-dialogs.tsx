@@ -41,7 +41,9 @@ import { ApiError } from '@/lib/api/client';
 import { formatHora } from '@/lib/format';
 import type { Actividad } from '@/lib/types/models';
 
-const TIPOS = ['visita', 'comida', 'transporte', 'alojamiento', 'entretenimiento'];
+// Sin "alojamiento": es un costo del viaje, no una actividad de un día. El hotel
+// se elige una vez por viaje desde el tab Alojamiento.
+const TIPOS = ['visita', 'comida', 'transporte', 'entretenimiento'];
 const ESTADOS = ['pendiente', 'completada', 'cancelada'];
 const NONE = '__none__';
 

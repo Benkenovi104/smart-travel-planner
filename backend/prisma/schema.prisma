@@ -184,6 +184,8 @@ model OpcionVuelo {
   moneda         String?   @db.VarChar
   duracion_total Int?
   url_referencia String?   @db.VarChar
+  // A lo sumo una opcion por viaje queda seleccionada: es la que suma al presupuesto.
+  seleccionado   Boolean   @default(false)
   viajes         Viaje     @relation(fields: [id_viaje], references: [id_viaje], onDelete: NoAction, onUpdate: NoAction)
 
   @@map("opciones_vuelo")
@@ -200,6 +202,8 @@ model OpcionAlojamiento {
   latitud          Decimal? @db.Decimal(10, 7)
   longitud         Decimal? @db.Decimal(10, 7)
   url_referencia   String?  @db.VarChar
+  // A lo sumo una opcion por viaje queda seleccionada: es la que suma al presupuesto.
+  seleccionado     Boolean  @default(false)
   viajes           Viaje    @relation(fields: [id_viaje], references: [id_viaje], onDelete: NoAction, onUpdate: NoAction)
 
   @@map("opciones_alojamiento")

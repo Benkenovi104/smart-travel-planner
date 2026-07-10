@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
-import { Loader2, MapPin, MapPinOff } from 'lucide-react';
+import { BedDouble, Loader2, MapPin, MapPinOff } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useGeocodificar } from '@/lib/query/use-itinerario';
+import { useAlojamiento } from '@/lib/query/use-reservas';
 import { colorDia } from './colors';
 import type { Itinerario } from '@/lib/types/models';
 
@@ -33,13 +34,21 @@ export function MapaSection({
 }) {
   const [diaSel, setDiaSel] = useState<number | null>(null);
 
+  // El alojamiento elegido se dibuja como un pin fijo, en todos los días.
+  const { data: alojamientos } = useAlojamiento(idViaje);
+  const hotel =
+    alojamientos?.find((a) => a.seleccionado && a.lat != null && a.lng != null) ??
+    null;
+
   const actividades = itinerario.dias.flatMap((d) => d.actividades);
   const conCoords = actividades.filter(
     (a) => a.lugar.lat != null && a.lugar.lng != null,
   ).length;
   const sinCoords = actividades.length - conCoords;
 
-  if (conCoords === 0) {
+  // Con el hotel ubicado ya hay algo que mostrar, aunque ninguna actividad tenga
+  // coordenadas todavía.
+  if (conCoords === 0 && !hotel) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed py-16 text-center">
         <MapPinOff className="text-muted-foreground size-10" />
@@ -67,31 +76,44 @@ export function MapaSection({
 
   return (
     <div className="space-y-3">
-      {/* Filtro por día */}
-      <Select
-        value={diaSel === null ? 'todos' : String(diaSel)}
-        onValueChange={(v) => setDiaSel(v === 'todos' ? null : Number(v))}
-      >
-        <SelectTrigger className="w-56">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="todos">Todos los días</SelectItem>
-          {diasConPuntos.map((d) => (
-            <SelectItem key={d.numeroDia} value={String(d.numeroDia)}>
-              <span className="flex items-center gap-2">
-                <span
-                  className="size-2.5 rounded-full"
-                  style={{ backgroundColor: d.color }}
-                />
-                Día {d.numeroDia}
-              </span>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {/* Filtro por día */}
+        <Select
+          value={diaSel === null ? 'todos' : String(diaSel)}
+          onValueChange={(v) => setDiaSel(v === 'todos' ? null : Number(v))}
+        >
+          <SelectTrigger className="w-56">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos los días</SelectItem>
+            {diasConPuntos.map((d) => (
+              <SelectItem key={d.numeroDia} value={String(d.numeroDia)}>
+                <span className="flex items-center gap-2">
+                  <span
+                    className="size-2.5 rounded-full"
+                    style={{ backgroundColor: d.color }}
+                  />
+                  Día {d.numeroDia}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-      <MapaItinerario itinerario={itinerario} diaSeleccionado={diaSel} />
+        {hotel && (
+          <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
+            <BedDouble className="size-3.5" />
+            El pin oscuro es tu alojamiento: {hotel.nombre ?? 'sin nombre'}
+          </p>
+        )}
+      </div>
+
+      <MapaItinerario
+        itinerario={itinerario}
+        diaSeleccionado={diaSel}
+        hotel={hotel}
+      />
 
       {sinCoords > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-2">

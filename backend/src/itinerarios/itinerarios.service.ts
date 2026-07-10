@@ -78,6 +78,15 @@ export class ItinerariosService {
       })),
     });
 
+    // El alojamiento es un costo del viaje, no una actividad de un día: el usuario
+    // elige su hotel aparte. Al prompt se lo pedimos, pero el modelo igual las
+    // genera a veces, así que las descartamos acá.
+    for (const diaIA of itinerarioIA.dias) {
+      diaIA.actividades = diaIA.actividades.filter(
+        (a) => a.tipo_actividad !== 'alojamiento',
+      );
+    }
+
     // Resolver los lugares ANTES de la transacción: son un caché compartido
     // (Google Places / generaciones previas) y no necesitan ser atómicos con el
     // itinerario. Hacerlo acá evita que N lookups+inserts contra Supabase (cada

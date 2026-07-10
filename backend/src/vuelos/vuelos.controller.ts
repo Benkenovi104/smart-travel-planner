@@ -1,6 +1,8 @@
 import {
+  Body,
   Controller,
   Post,
+  Patch,
   Get,
   Param,
   ParseIntPipe,
@@ -14,6 +16,7 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 import { VuelosService } from './vuelos.service.js';
+import { SeleccionarVueloDto } from './dto/seleccionar-vuelo.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 
 @ApiTags('Vuelos')
@@ -34,6 +37,26 @@ export class VuelosController {
   })
   buscar(@Request() req, @Param('idViaje', ParseIntPipe) idViaje: number) {
     return this.vuelosService.buscarYGuardar(req.user.id_usuario, idViaje);
+  }
+
+  @Patch(':idVuelo/seleccionar')
+  @ApiOperation({
+    summary:
+      'Elegir (o descartar) una opción de vuelo. Es exclusiva por viaje y recalcula el presupuesto',
+  })
+  @ApiResponse({ status: 404, description: 'Opción de vuelo no encontrada.' })
+  seleccionar(
+    @Request() req,
+    @Param('idViaje', ParseIntPipe) idViaje: number,
+    @Param('idVuelo', ParseIntPipe) idVuelo: number,
+    @Body() dto: SeleccionarVueloDto,
+  ) {
+    return this.vuelosService.seleccionar(
+      req.user.id_usuario,
+      idViaje,
+      idVuelo,
+      dto.seleccionado,
+    );
   }
 
   @Get()

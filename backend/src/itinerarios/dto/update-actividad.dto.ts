@@ -9,6 +9,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { TIPOS_ACTIVIDAD } from './tipos-actividad.js';
 
 const HORA_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
 const ESTADOS = ['pendiente', 'completada', 'cancelada'];
@@ -16,11 +17,13 @@ const ESTADOS = ['pendiente', 'completada', 'cancelada'];
 export class UpdateActividadDto {
   @ApiPropertyOptional({
     example: 'visita',
-    enum: ['visita', 'comida', 'transporte', 'alojamiento', 'entretenimiento'],
+    enum: TIPOS_ACTIVIDAD,
+    description:
+      'El alojamiento no es una actividad: se elige un hotel por viaje desde /alojamiento.',
   })
   @IsOptional()
   @IsString()
-  @MaxLength(50)
+  @IsIn([...TIPOS_ACTIVIDAD])
   tipo_actividad?: string;
 
   @ApiPropertyOptional({ example: '09:30' })

@@ -12,9 +12,9 @@ import {
   useMap,
 } from 'react-leaflet';
 
-import { formatHora } from '@/lib/format';
+import { formatHora, formatMoney } from '@/lib/format';
 import { colorDia } from './colors';
-import type { Itinerario } from '@/lib/types/models';
+import type { Itinerario, OpcionAlojamiento } from '@/lib/types/models';
 
 type Punto = {
   id: number;
@@ -37,22 +37,39 @@ function iconoNumerado(color: string, n: number) {
   });
 }
 
-function FitBounds({ puntos }: { puntos: Punto[] }) {
+/**
+ * El hotel no es una parada de un día: se distingue de las actividades con forma
+ * de gota, tamaño mayor y un ícono de cama en vez de un número.
+ */
+function iconoHotel() {
+  const cama = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg>`;
+  return L.divIcon({
+    className: '',
+    html: `<div style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:9999px 9999px 9999px 2px;transform:rotate(-45deg);background:#0f172a;border:2.5px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.5)"><div style="transform:rotate(45deg);display:flex">${cama}</div></div>`,
+    iconSize: [36, 36],
+    iconAnchor: [18, 34],
+    popupAnchor: [0, -34],
+  });
+}
+
+function FitBounds({ coords }: { coords: [number, number][] }) {
   const map = useMap();
   useEffect(() => {
-    if (puntos.length === 0) return;
-    const bounds = L.latLngBounds(puntos.map((p) => [p.lat, p.lng]));
-    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
-  }, [puntos, map]);
+    if (coords.length === 0) return;
+    map.fitBounds(L.latLngBounds(coords), { padding: [40, 40], maxZoom: 15 });
+  }, [coords, map]);
   return null;
 }
 
 export default function MapaItinerario({
   itinerario,
   diaSeleccionado,
+  hotel,
 }: {
   itinerario: Itinerario;
   diaSeleccionado?: number | null;
+  /** Alojamiento elegido, con coordenadas. Se muestra en todos los días. */
+  hotel?: OpcionAlojamiento | null;
 }) {
   // Puntos y rutas por día (solo actividades con coordenadas).
   const { puntos, rutas } = useMemo(() => {
@@ -89,9 +106,18 @@ export default function MapaItinerario({
     return { puntos, rutas };
   }, [itinerario, diaSeleccionado]);
 
-  const centro: [number, number] = puntos.length
-    ? [puntos[0].lat, puntos[0].lng]
-    : [0, 0];
+  const hotelLat = hotel?.lat ?? null;
+  const hotelLng = hotel?.lng ?? null;
+
+  // El hotel entra en el encuadre para que nunca quede fuera de pantalla. Las
+  // deps son primitivas: con el objeto `hotel` el fitBounds correría en cada render.
+  const coordsParaEncuadre = useMemo(() => {
+    const c: [number, number][] = puntos.map((p) => [p.lat, p.lng]);
+    if (hotelLat != null && hotelLng != null) c.push([hotelLat, hotelLng]);
+    return c;
+  }, [puntos, hotelLat, hotelLng]);
+
+  const centro: [number, number] = coordsParaEncuadre[0] ?? [0, 0];
 
   return (
     <MapContainer
@@ -130,7 +156,21 @@ export default function MapaItinerario({
           </Popup>
         </Marker>
       ))}
-      <FitBounds puntos={puntos} />
+      {hotel && hotelLat != null && hotelLng != null && (
+        <Marker position={[hotelLat, hotelLng]} icon={iconoHotel()} zIndexOffset={1000}>
+          <Popup>
+            <div className="space-y-0.5">
+              <p className="font-medium">{hotel.nombre ?? 'Tu alojamiento'}</p>
+              <p className="text-xs text-neutral-500">
+                Tu alojamiento
+                {hotel.precioPorNoche != null &&
+                  ` · ${formatMoney(hotel.precioPorNoche)} / noche`}
+              </p>
+            </div>
+          </Popup>
+        </Marker>
+      )}
+      <FitBounds coords={coordsParaEncuadre} />
     </MapContainer>
   );
 }

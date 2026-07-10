@@ -1,14 +1,20 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ForbiddenException, BadRequestException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { describe, beforeEach, it, expect, jest } from '@jest/globals';
 import { VuelosService } from './vuelos.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { SkyScrapperService } from './sky-scrapper.service.js';
+import { PresupuestosService } from '../presupuestos/presupuestos.service.js';
 
 describe('VuelosService', () => {
   let service: VuelosService;
   let prisma: any;
   let sky: any;
+  let presupuestos: any;
 
   const viaje = {
     id_viaje: 5,
@@ -23,10 +29,22 @@ describe('VuelosService', () => {
   beforeEach(async () => {
     prisma = {
       viaje: { findUnique: jest.fn() },
-      opcionVuelo: { deleteMany: jest.fn(), createMany: jest.fn(), findMany: jest.fn() },
+      opcionVuelo: {
+        deleteMany: jest.fn(),
+        createMany: jest.fn(),
+        findMany: jest.fn(),
+        findUnique: jest.fn(),
+        update: jest.fn(),
+        updateMany: jest.fn(),
+      },
       $transaction: jest.fn(async (cb: any) =>
         cb({
-          opcionVuelo: { deleteMany: jest.fn(), createMany: jest.fn() },
+          opcionVuelo: {
+            deleteMany: jest.fn(),
+            createMany: jest.fn(),
+            update: jest.fn(),
+            updateMany: jest.fn(),
+          },
         }),
       ),
     };
@@ -34,11 +52,13 @@ describe('VuelosService', () => {
       resolverAeropuerto: jest.fn(),
       buscarVuelos: jest.fn(),
     };
+    presupuestos = { recalcularConTx: jest.fn() };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         VuelosService,
         { provide: PrismaService, useValue: prisma },
         { provide: SkyScrapperService, useValue: sky },
+        { provide: PresupuestosService, useValue: presupuestos },
       ],
     }).compile();
     service = module.get<VuelosService>(VuelosService);
@@ -97,5 +117,66 @@ describe('VuelosService', () => {
     expect(creados[1].precio).toBe(250); // 120 + 130
     expect(creados.length).toBe(2);
     expect(creados[0].moneda).toBe('USD');
+  });
+
+  describe('seleccionar', () => {
+    it('deselecciona las demás opciones del viaje y recalcula el presupuesto', async () => {
+      prisma.viaje.findUnique.mockResolvedValue(viaje);
+      prisma.opcionVuelo.findUnique.mockResolvedValue({
+        id_vuelo: 7,
+        id_viaje: 5,
+      });
+      prisma.opcionVuelo.findMany.mockResolvedValue([]);
+
+      const tx = {
+        opcionVuelo: { update: jest.fn(), updateMany: jest.fn() },
+      };
+      prisma.$transaction.mockImplementation(async (cb: any) => cb(tx));
+
+      await service.seleccionar(1, 5, 7, true);
+
+      expect(tx.opcionVuelo.updateMany).toHaveBeenCalledWith({
+        where: { id_viaje: 5, seleccionado: true },
+        data: { seleccionado: false },
+      });
+      expect(tx.opcionVuelo.update).toHaveBeenCalledWith({
+        where: { id_vuelo: 7 },
+        data: { seleccionado: true },
+      });
+      expect(presupuestos.recalcularConTx).toHaveBeenCalledWith(tx, 5);
+    });
+
+    it('al deseleccionar no toca las demás opciones', async () => {
+      prisma.viaje.findUnique.mockResolvedValue(viaje);
+      prisma.opcionVuelo.findUnique.mockResolvedValue({
+        id_vuelo: 7,
+        id_viaje: 5,
+      });
+      prisma.opcionVuelo.findMany.mockResolvedValue([]);
+
+      const tx = {
+        opcionVuelo: { update: jest.fn(), updateMany: jest.fn() },
+      };
+      prisma.$transaction.mockImplementation(async (cb: any) => cb(tx));
+
+      await service.seleccionar(1, 5, 7, false);
+
+      expect(tx.opcionVuelo.updateMany).not.toHaveBeenCalled();
+      expect(tx.opcionVuelo.update).toHaveBeenCalledWith({
+        where: { id_vuelo: 7 },
+        data: { seleccionado: false },
+      });
+    });
+
+    it('lanza NotFound si la opción es de otro viaje', async () => {
+      prisma.viaje.findUnique.mockResolvedValue(viaje);
+      prisma.opcionVuelo.findUnique.mockResolvedValue({
+        id_vuelo: 7,
+        id_viaje: 99,
+      });
+      await expect(service.seleccionar(1, 5, 7, true)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
   });
 });

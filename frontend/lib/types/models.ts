@@ -111,6 +111,14 @@ export interface CambioItinerario {
   fecha: string | null;
 }
 
+/** Línea del desglose de presupuesto (una actividad, el vuelo o el alojamiento elegido). */
+export interface GastoEstimado {
+  id: number;
+  categoria: string | null;
+  descripcion: string | null;
+  monto: number | null;
+}
+
 export interface Presupuesto {
   total: number | null;
   vuelos: number | null;
@@ -118,6 +126,7 @@ export interface Presupuesto {
   actividades: number | null;
   comidas: number | null;
   transporteLocal: number | null;
+  gastos: GastoEstimado[];
 }
 
 export interface OpcionVuelo {
@@ -127,10 +136,12 @@ export interface OpcionVuelo {
   fechaSalida: string | null;
   fechaRegreso: string | null;
   aerolinea: string | null;
+  /** Total ida+vuelta para todo el grupo (la búsqueda ya consulta por `cantidadPersonas`). */
   precio: number | null;
   moneda: string | null;
   duracionTotal: number | null;
   url: string | null;
+  seleccionado: boolean;
 }
 
 export interface OpcionAlojamiento {
@@ -143,4 +154,5 @@ export interface OpcionAlojamiento {
   lat: number | null;
   lng: number | null;
   url: string | null;
+  seleccionado: boolean;
 }

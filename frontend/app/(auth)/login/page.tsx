@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -10,6 +11,7 @@ import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Card,
   CardContent,
@@ -35,7 +37,19 @@ const schema = z.object({
 });
 type Values = z.infer<typeof schema>;
 
+/**
+ * `useSearchParams` obliga a un límite de Suspense: sin él, el prerender de
+ * producción de `/login` falla (en dev no se nota).
+ */
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoginSkeleton />}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const login = useLogin();
@@ -126,6 +140,26 @@ export default function LoginPage() {
           </CardFooter>
         </form>
       </Form>
+    </Card>
+  );
+}
+
+function LoginSkeleton() {
+  return (
+    <Card>
+      <CardHeader className="text-center">
+        <CardTitle className="text-2xl">Iniciar sesión</CardTitle>
+        <CardDescription>
+          Entrá para planificar tu próximo viaje.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-16 w-full" />
+      </CardContent>
+      <CardFooter className="mt-6">
+        <Skeleton className="h-9 w-full" />
+      </CardFooter>
     </Card>
   );
 }
