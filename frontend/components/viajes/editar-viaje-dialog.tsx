@@ -79,16 +79,36 @@ function EditarViajeForm({
       values.fecha_inicio !== toDateInput(viaje.fechaInicio) ||
       values.fecha_fin !== toDateInput(viaje.fechaFin);
 
+    // El backend reajusta los días del itinerario a las fechas nuevas: recalcula
+    // sus fechas y agrega/borra días. Avisamos según qué pasó, porque acortar
+    // pierde actividades y alargar deja días vacíos (el contenido no se replanifica).
+    const diasDe = (inicio: string, fin: string) =>
+      Math.round(
+        (new Date(fin).getTime() - new Date(inicio).getTime()) / 86_400_000,
+      ) + 1;
+    const diasAntes = diasDe(
+      toDateInput(viaje.fechaInicio),
+      toDateInput(viaje.fechaFin),
+    );
+    const diasAhora = diasDe(values.fecha_inicio, values.fecha_fin);
+
     actualizar.mutate(toViajePayload(values, intereses), {
       onSuccess: () => {
         onListo();
         toast.success('Viaje actualizado');
-        // Los días del itinerario conservan las fechas viejas: el backend no los
-        // recorre al editar el viaje, hay que regenerarlo.
         if (cambianLasFechas && tieneItinerario) {
-          toast.warning('El itinerario quedó con las fechas anteriores', {
-            description: 'Regeneralo para alinearlo con las fechas nuevas.',
-          });
+          if (diasAhora < diasAntes) {
+            toast.warning('Se acortó el itinerario', {
+              description:
+                'Se quitaron los días sobrantes y sus actividades. Regeneralo si querés replanificarlo.',
+            });
+          } else if (diasAhora > diasAntes) {
+            toast.info('Se agregaron días vacíos al itinerario', {
+              description: 'Sumá actividades a mano o regeneralo.',
+            });
+          } else {
+            toast.info('Se actualizaron las fechas de los días del itinerario');
+          }
         }
       },
       onError: (e) =>

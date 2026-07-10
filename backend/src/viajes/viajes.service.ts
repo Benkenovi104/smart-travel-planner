@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { PresupuestosService } from '../presupuestos/presupuestos.service.js';
+import { ItinerariosService } from '../itinerarios/itinerarios.service.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { CreateViajeDto } from './dto/create-viaje.dto.js';
 import { UpdateViajeDto } from './dto/update-viaje.dto.js';
@@ -35,6 +36,7 @@ export class ViajesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly presupuestos: PresupuestosService,
+    private readonly itinerarios: ItinerariosService,
   ) {}
 
   async create(id_usuario: number, dto: CreateViajeDto) {
@@ -140,6 +142,14 @@ export class ViajesService {
       });
 
       if (cambianLasFechas) {
+        // Primero reajustar los días del itinerario (puede borrar días con sus
+        // actividades), después recalcular el presupuesto sobre lo que quedó.
+        await this.itinerarios.reajustarFechasEnTx(
+          tx,
+          id_viaje,
+          fechaInicio,
+          fechaFin,
+        );
         await this.presupuestos.recalcularConTx(tx, id_viaje);
       }
 

@@ -8,11 +8,13 @@ import { describe, beforeEach, afterEach, it, expect, jest } from '@jest/globals
 import { ViajesService } from './viajes.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { PresupuestosService } from '../presupuestos/presupuestos.service.js';
+import { ItinerariosService } from '../itinerarios/itinerarios.service.js';
 
 describe('ViajesService', () => {
   let service: ViajesService;
   let prisma: any;
   let presupuestos: any;
+  let itinerarios: any;
 
   beforeEach(async () => {
     prisma = {
@@ -24,11 +26,13 @@ describe('ViajesService', () => {
       $transaction: jest.fn(),
     };
     presupuestos = { recalcularConTx: jest.fn() };
+    itinerarios = { reajustarFechasEnTx: jest.fn() };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ViajesService,
         { provide: PrismaService, useValue: prisma },
         { provide: PresupuestosService, useValue: presupuestos },
+        { provide: ItinerariosService, useValue: itinerarios },
       ],
     }).compile();
     service = module.get<ViajesService>(ViajesService);
@@ -104,16 +108,38 @@ describe('ViajesService', () => {
 
     beforeEach(() => prisma.viaje.findUnique.mockResolvedValue(viajeActual));
 
-    it('recalcula el presupuesto cuando cambian las fechas', async () => {
+    it('reajusta el itinerario y recalcula el presupuesto cuando cambian las fechas', async () => {
       const tx = mockTx();
       await service.update(1, 5, { fecha_fin: '2026-09-20' });
       expect(tx.viaje.update).toHaveBeenCalled();
+      expect(itinerarios.reajustarFechasEnTx).toHaveBeenCalledWith(
+        tx,
+        5,
+        viajeActual.fechaInicio,
+        new Date('2026-09-20'),
+      );
       expect(presupuestos.recalcularConTx).toHaveBeenCalledWith(tx, 5);
     });
 
-    it('no recalcula si las fechas no cambian', async () => {
+    it('reajusta el itinerario antes de recalcular el presupuesto', async () => {
+      // Acortar puede borrar días con actividades: el presupuesto tiene que
+      // recalcularse sobre lo que quedó, no antes.
+      const orden: string[] = [];
+      itinerarios.reajustarFechasEnTx.mockImplementation(async () => {
+        orden.push('reajustar');
+      });
+      presupuestos.recalcularConTx.mockImplementation(async () => {
+        orden.push('recalcular');
+      });
+      mockTx();
+      await service.update(1, 5, { fecha_fin: '2026-09-20' });
+      expect(orden).toEqual(['reajustar', 'recalcular']);
+    });
+
+    it('no toca itinerario ni presupuesto si las fechas no cambian', async () => {
       mockTx();
       await service.update(1, 5, { estado: 'completado' });
+      expect(itinerarios.reajustarFechasEnTx).not.toHaveBeenCalled();
       expect(presupuestos.recalcularConTx).not.toHaveBeenCalled();
     });
 

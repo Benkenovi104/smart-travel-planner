@@ -29,6 +29,83 @@ export class ItinerariosService {
     private readonly geocoding: GeocodingService,
   ) {}
 
+  private static readonly MS_POR_DIA = 24 * 60 * 60 * 1000;
+
+  /**
+   * Reajusta los días del itinerario a un nuevo rango de fechas del viaje.
+   * Pensado para llamarse desde la transacción de `ViajesService.update`.
+   *
+   * El día N va siempre en `fechaInicio + (N-1) días`, y la cantidad de días es
+   * `diff(inicio, fin) + 1`. Al cambiar el rango:
+   * - se recalcula la `fecha` de los días que sobreviven,
+   * - se borran los días que sobran (con sus actividades) si el viaje se acortó,
+   * - se crean días vacíos al final si se alargó.
+   *
+   * No recalcula el presupuesto: de eso se encarga quien llama, después, porque
+   * borrar días puede haber sacado actividades. Si el viaje no tiene itinerario,
+   * no hace nada.
+   */
+  async reajustarFechasEnTx(
+    tx: Tx,
+    id_viaje: number,
+    fechaInicio: Date,
+    fechaFin: Date,
+  ): Promise<void> {
+    const itinerario = await tx.itinerario.findUnique({ where: { id_viaje } });
+    if (!itinerario) return;
+
+    const dias = await tx.diaItinerario.findMany({
+      where: { id_itinerario: itinerario.id_itinerario },
+      orderBy: { numeroDia: 'asc' },
+    });
+    if (dias.length === 0) return;
+
+    // fechaInicio/fechaFin están a medianoche UTC: la resta da días enteros.
+    const totalDias =
+      Math.round(
+        (fechaFin.getTime() - fechaInicio.getTime()) /
+          ItinerariosService.MS_POR_DIA,
+      ) + 1;
+
+    const fechaDeDia = (numeroDia: number) =>
+      new Date(
+        fechaInicio.getTime() + (numeroDia - 1) * ItinerariosService.MS_POR_DIA,
+      );
+
+    // Días que sobran: se borran del más nuevo al más viejo, con sus actividades.
+    const sobran = dias.filter((d) => d.numeroDia > totalDias);
+    if (sobran.length > 0) {
+      const ids = sobran.map((d) => d.id_dia_itinerario);
+      await tx.actividadItinerario.deleteMany({
+        where: { id_dia_itinerario: { in: ids } },
+      });
+      await tx.diaItinerario.deleteMany({
+        where: { id_dia_itinerario: { in: ids } },
+      });
+    }
+
+    // Días que sobreviven: se recalcula su fecha (el numeroDia no cambia).
+    for (const dia of dias) {
+      if (dia.numeroDia > totalDias) continue;
+      await tx.diaItinerario.update({
+        where: { id_dia_itinerario: dia.id_dia_itinerario },
+        data: { fecha: fechaDeDia(dia.numeroDia) },
+      });
+    }
+
+    // Días que faltan: se crean vacíos al final.
+    const maxExistente = dias[dias.length - 1].numeroDia;
+    for (let n = maxExistente + 1; n <= totalDias; n++) {
+      await tx.diaItinerario.create({
+        data: {
+          id_itinerario: itinerario.id_itinerario,
+          numeroDia: n,
+          fecha: fechaDeDia(n),
+        },
+      });
+    }
+  }
+
   async generar(id_usuario: number, id_viaje: number) {
     // Verificar que el viaje pertenece al usuario
     const viaje = await this.prisma.viaje.findUnique({

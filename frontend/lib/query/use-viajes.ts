@@ -31,9 +31,10 @@ export function useActualizarViaje(id: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: qk.viaje(id) });
       qc.invalidateQueries({ queryKey: qk.viajes });
-      // Cambiar las fechas cambia la cantidad de noches y el backend recalcula
-      // el presupuesto dentro del mismo PATCH.
+      // Cambiar las fechas recalcula el presupuesto y reajusta los días del
+      // itinerario (agrega/borra días) dentro del mismo PATCH.
       qc.invalidateQueries({ queryKey: qk.presupuesto(id) });
+      qc.invalidateQueries({ queryKey: qk.itinerario(id) });
     },
   });
 }
