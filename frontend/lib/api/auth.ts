@@ -31,3 +31,32 @@ export function register(input: RegisterInput) {
 export function logout() {
   return apiFetch<{ ok: true }>('auth/logout', { method: 'POST' });
 }
+
+/**
+ * Pide el email de recuperación. El backend responde siempre lo mismo exista o
+ * no el email, para no revelar qué cuentas están registradas: la UI tiene que
+ * mostrar el mismo mensaje en los dos casos.
+ */
+export function forgotPassword(email: string) {
+  return apiFetch<{ message: string }>('auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function resetPassword(input: { token: string; password_nueva: string }) {
+  return apiFetch<{ message: string }>('auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function changePassword(input: {
+  password_actual: string;
+  password_nueva: string;
+}) {
+  return apiFetch<{ message: string }>('auth/change-password', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}

@@ -41,6 +41,7 @@ import {
   useAgregarInteres,
   useQuitarInteres,
 } from '@/lib/query/use-usuario';
+import { CambiarPassword, EliminarCuenta } from '@/components/perfil/seguridad';
 import { ApiError } from '@/lib/api/client';
 import type {
   PresupuestoPreferido,
@@ -94,6 +95,8 @@ export default function PerfilPage() {
         tipo={me?.perfil?.tipoViajero ?? ''}
       />
       <InteresesSection />
+      <CambiarPassword />
+      <EliminarCuenta />
     </div>
   );
 }

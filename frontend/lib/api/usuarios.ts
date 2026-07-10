@@ -68,3 +68,11 @@ export function removeInteres(idInteres: number) {
     method: 'DELETE',
   });
 }
+
+/** Borra la cuenta y todos sus viajes. Pide la contraseña como confirmación. */
+export function deleteMe(password: string) {
+  return apiFetch<unknown>('usuarios/me', {
+    method: 'DELETE',
+    body: JSON.stringify({ password }),
+  });
+}

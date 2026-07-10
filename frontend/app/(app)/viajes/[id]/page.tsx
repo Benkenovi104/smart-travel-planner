@@ -232,13 +232,17 @@ export default function ViajeDetallePage() {
       {/* Presupuesto, vuelos y alojamiento no dependen del itinerario, así que
           los tabs se muestran siempre y cada uno resuelve su propio estado vacío. */}
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          <TabsTrigger value="itinerario">Itinerario</TabsTrigger>
-          <TabsTrigger value="mapa">Mapa</TabsTrigger>
-          <TabsTrigger value="presupuesto">Presupuesto</TabsTrigger>
-          <TabsTrigger value="vuelos">Vuelos</TabsTrigger>
-          <TabsTrigger value="alojamiento">Alojamiento</TabsTrigger>
-        </TabsList>
+        {/* Cinco tabs no entran en un teléfono: la barra scrollea en vez de
+            comprimir las etiquetas hasta hacerlas ilegibles. */}
+        <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+          <TabsList>
+            <TabsTrigger value="itinerario">Itinerario</TabsTrigger>
+            <TabsTrigger value="mapa">Mapa</TabsTrigger>
+            <TabsTrigger value="presupuesto">Presupuesto</TabsTrigger>
+            <TabsTrigger value="vuelos">Vuelos</TabsTrigger>
+            <TabsTrigger value="alojamiento">Alojamiento</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="itinerario" className="space-y-3 pt-4">
           {itinerario.data && (
