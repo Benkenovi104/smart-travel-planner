@@ -99,10 +99,11 @@ Con el servidor corriendo:
 
 Todos los endpoints salvo `auth` y `health` requieren `Authorization: Bearer <token>` (`JwtAuthGuard`). La estrategia JWT **verifica contra la base que el usuario siga existiendo**: el token de una cuenta borrada da 401 de inmediato, sin esperar a que venza.
 
-### Dos reglas de dominio que conviene conocer
+### Tres reglas de dominio que conviene conocer
 
 - **El alojamiento no es una actividad del itinerario**, sino un costo del viaje. `alojamiento` no es un `tipo_actividad` válido (ver `itinerarios/dto/tipos-actividad.ts`); el usuario elige un hotel por viaje y de ahí sale `monto_alojamiento`. Se le pide a Gemini que no lo genere **y además se filtra al persistir**, porque el modelo ignora la instrucción con frecuencia.
 - **Los precios ya vienen calculados para todo el grupo.** `OpcionVuelo.precio` es el total ida+vuelta (la búsqueda consulta la API con `cantidadPersonas` adultos) y `precio_por_noche` también está prorrateado. **No hay que multiplicar por la cantidad de personas.** Verificado contra la API de Booking: `grossPrice.value` es el total de la estadía completa (4 noches cuestan exactamente 4× lo que 1 noche), y `room_qty` no altera el precio de una propiedad — sólo cambia qué propiedades tienen disponibilidad.
+- **La búsqueda de lugares está acotada a categorías turísticas.** `GET /api/lugares/buscar` consulta Google Places sólo por las 8 categorías de `CATEGORIAS_TURISTICAS` (museo, atracción turística, sitio histórico, monumento, parque, mirador, restaurante, café). Un POI que no cae en ninguna —por ejemplo un **estadio de fútbol**— no se cachea y por lo tanto **no aparece en el autocompletado por su nombre** (`GET /api/lugares?q=`), que sólo busca sobre lo ya cacheado. Ej.: buscando "kempes" en Córdoba aparece "Parque del Kempes" (entró como `parque`), pero no el "Estadio Mario Alberto Kempes". El usuario igual puede tipear el nombre completo y agregarlo como **texto libre**: la actividad se guarda sin `id_lugar` (sin rating ni categoría reales) y las coordenadas se resuelven después con Nominatim. Para incluir un tipo nuevo, agregarlo a `CATEGORIAS_TURISTICAS` en `lugares/lugares.service.ts`.
 
 > Nota: los datos de vuelos/alojamiento vienen de mirrors no oficiales de Skyscanner y Booking.com en RapidAPI — son informativos/de simulación, no hay integración de reserva real. Para desarrollar sin gastar cuota, ver `RAPIDAPI_MOCK`.
 
