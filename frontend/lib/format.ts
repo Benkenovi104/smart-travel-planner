@@ -1,9 +1,17 @@
+// Las fechas "de calendario" (inicio/fin del viaje, fecha de cada día, salida de
+// un vuelo) las guarda el backend a medianoche UTC. Hay que formatearlas en UTC:
+// en un huso negativo como AR (UTC-3), la hora local cae en el día anterior y se
+// mostraría todo corrido un día. NO aplica a los timestamps reales (ver
+// FECHA_HORA_FMT), que sí van en hora local.
 const FECHA_FMT = new Intl.DateTimeFormat('es-AR', {
   day: '2-digit',
   month: 'short',
   year: 'numeric',
+  timeZone: 'UTC',
 });
 
+// Instantes reales (ej. cuándo se hizo un cambio del itinerario): hora local, que
+// es lo que espera ver el usuario.
 const FECHA_HORA_FMT = new Intl.DateTimeFormat('es-AR', {
   day: '2-digit',
   month: 'short',
