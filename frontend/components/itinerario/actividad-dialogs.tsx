@@ -37,9 +37,11 @@ import {
   useAgregarActividad,
   useEditarActividad,
 } from '@/lib/query/use-itinerario';
+import { useViaje } from '@/lib/query/use-viajes';
 import { ApiError } from '@/lib/api/client';
 import { formatHora } from '@/lib/format';
-import type { Actividad } from '@/lib/types/models';
+import type { Actividad, Lugar } from '@/lib/types/models';
+import { LugarAutocomplete } from './lugar-autocomplete';
 
 // Sin "alojamiento": es un costo del viaje, no una actividad de un día. El hotel
 // se elige una vez por viaje desde el tab Alojamiento.
@@ -86,7 +88,12 @@ export function AgregarActividadDialog({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  // Lugar real elegido del autocompletado. Si es null, el nombre va como texto
+  // libre y el backend lo geocodifica con Nominatim.
+  const [lugar, setLugar] = useState<Lugar | null>(null);
   const agregar = useAgregarActividad(idViaje);
+  // Ya está en la caché de TanStack Query: lo cargó la página del detalle.
+  const { data: viaje } = useViaje(idViaje);
   const form = useForm<CreateValues>({
     resolver: zodResolver(createSchema),
     defaultValues: {
@@ -100,14 +107,36 @@ export function AgregarActividadDialog({
     },
   });
 
+  function elegirLugar(elegido: Lugar | null) {
+    setLugar(elegido);
+    // La ciudad y el costo salen del lugar real; el usuario todavía puede pisar
+    // el costo antes de guardar.
+    form.setValue('ciudad', elegido?.ciudad ?? '');
+    if (elegido?.precioEstimado != null) {
+      form.setValue('costo_estimado', String(elegido.precioEstimado));
+    }
+  }
+
+  function cerrar() {
+    form.reset();
+    setLugar(null);
+    setOpen(false);
+  }
+
   function onSubmit(v: CreateValues) {
     agregar.mutate(
       {
         idDia,
         input: {
-          nombre_lugar: v.nombre_lugar,
-          ciudad: v.ciudad || undefined,
-          categoria: v.categoria || undefined,
+          // Con `id_lugar` el backend reusa el lugar cacheado (ya trae lat/lng,
+          // rating y categoría) e ignora nombre/ciudad/categoría.
+          ...(lugar
+            ? { id_lugar: lugar.id }
+            : {
+                nombre_lugar: v.nombre_lugar,
+                ciudad: v.ciudad || undefined,
+                categoria: v.categoria || undefined,
+              }),
           tipo_actividad: v.tipo_actividad || undefined,
           hora_inicio: v.hora_inicio || undefined,
           hora_fin: v.hora_fin || undefined,
@@ -117,8 +146,7 @@ export function AgregarActividadDialog({
       {
         onSuccess: () => {
           toast.success('Actividad agregada');
-          form.reset();
-          setOpen(false);
+          cerrar();
         },
         onError: (e) => toast.error(errMsg(e, 'No se pudo agregar')),
       },
@@ -126,25 +154,35 @@ export function AgregarActividadDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(v) => (v ? setOpen(true) : cerrar())}>
       <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Agregar actividad</DialogTitle>
           <DialogDescription>
-            Sumá un lugar o actividad a este día.
+            Escribí para buscar lugares reales del destino, o dejá el nombre a
+            mano.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          {/* `min-w-0`: sin esto el nombre largo de un lugar de Google Places
+              (que no puede truncar contra un grid item de ancho automático)
+              ensancha el diálogo y desborda los campos. */}
+          <form onSubmit={form.handleSubmit(onSubmit)} className="min-w-0 space-y-4">
             <FormField
               control={form.control}
               name="nombre_lugar"
               render={({ field }) => (
-                <FormItem>
+                <FormItem className="min-w-0">
                   <FormLabel>Lugar / actividad</FormLabel>
                   <FormControl>
-                    <Input placeholder="Museo del Louvre" {...field} />
+                    <LugarAutocomplete
+                      destino={viaje?.destinoPrincipal}
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      seleccionado={lugar}
+                      onSeleccionar={elegirLugar}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -158,7 +196,12 @@ export function AgregarActividadDialog({
                   <FormItem>
                     <FormLabel>Ciudad</FormLabel>
                     <FormControl>
-                      <Input placeholder="París" {...field} />
+                      <Input
+                        placeholder="París"
+                        // Con un lugar real elegido la ciudad viene de Google Places.
+                        disabled={Boolean(lugar)}
+                        {...field}
+                      />
                     </FormControl>
                   </FormItem>
                 )}

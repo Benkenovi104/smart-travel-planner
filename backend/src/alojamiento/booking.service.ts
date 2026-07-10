@@ -1,11 +1,26 @@
 import { Injectable, Logger } from '@nestjs/common';
 
 export interface HotelOpcion {
-  nombre: string;
+  /**
+   * Precio total de la estadía completa para todo el grupo, no por noche ni por
+   * persona. Verificado contra la API real: para el mismo hotel y las mismas
+   * fechas, `grossPrice` de 4 noches da exactamente 4× el de 1 noche.
+   */
   precioTotal: number;
+  nombre: string;
   rating: number | null;
   latitud: number | null;
   longitud: number | null;
+}
+
+/**
+ * Booking cotiza por `adults`; `room_qty` no cambia el precio de una propiedad
+ * (verificado: 6 adultos en 1 habitación y en 3 dan el mismo `grossPrice`), pero
+ * sí cambia qué propiedades tienen disponibilidad y entran en el resultado.
+ * Pedimos una habitación doble cada dos personas, que es el default razonable.
+ */
+export function habitacionesPara(personas: number): number {
+  return Math.max(1, Math.ceil(personas / 2));
 }
 
 interface DestinationResult {
@@ -31,6 +46,9 @@ const HOST = 'booking-com15.p.rapidapi.com';
  * es el total de la estadía (AlojamientoService lo divide por noches). Cada set
  * incluye un rating 10 a propósito, para seguir ejercitando la columna rating
  * Decimal(4,2).
+ *
+ * El mock ignora `adultos` y `habitaciones`: los precios no cambian con el tamaño
+ * del grupo. Es esperable, no un bug.
  *
  * Las coordenadas son aproximadas (centro de la ciudad / zona del hotel): alcanzan
  * para ver el pin en el mapa, no son un dato de producción.
@@ -114,6 +132,7 @@ export class BookingService {
     fechaEntrada: string;
     fechaSalida: string;
     adultos: number;
+    habitaciones: number;
   }): Promise<HotelOpcion[]> {
     if (this.mock) {
       const ciudad = params.destino.destId.replace(/^MOCK:/, '');
@@ -136,7 +155,7 @@ export class BookingService {
     url.searchParams.set('arrival_date', params.fechaEntrada);
     url.searchParams.set('departure_date', params.fechaSalida);
     url.searchParams.set('adults', String(params.adultos));
-    url.searchParams.set('room_qty', '1');
+    url.searchParams.set('room_qty', String(params.habitaciones));
     url.searchParams.set('currency_code', 'USD');
     url.searchParams.set('languagecode', 'es');
 

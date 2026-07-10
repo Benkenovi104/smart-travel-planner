@@ -2,7 +2,7 @@
 
 Aplicación web del [Smart Travel Planner](../README.md), construida con Next.js 16 (App Router) y React 19. Consume el [backend NestJS](../backend/README.md) a través de un **proxy BFF** propio, de modo que el JWT nunca queda accesible al JavaScript del navegador.
 
-Cubre el flujo completo: registro e inicio de sesión, perfil de viajero, creación de viajes, generación del itinerario con IA, edición manual con drag & drop, mapa, presupuesto, y selección de vuelo y alojamiento.
+Cubre el flujo completo: registro e inicio de sesión, perfil de viajero, creación y edición de viajes, generación del itinerario con IA, edición manual con drag & drop y búsqueda de lugares reales, mapa, presupuesto, y selección de vuelo y alojamiento.
 
 ## Stack
 
@@ -97,7 +97,11 @@ frontend/
 
 **Normalización de tipos.** El backend serializa con naming mixto (Prisma devuelve el nombre del campo del modelo, no el de la columna) y los `Decimal` viajan como `string`. Por eso `lib/types/api.ts` describe el shape crudo y `lib/api/normalize.ts` lo convierte a los modelos limpios de `lib/types/models.ts`. Los componentes solo ven modelos normalizados.
 
-**Invalidación cruzada.** El backend recalcula el presupuesto cuando se toca el itinerario o se elige un vuelo/alojamiento. Los hooks invalidan `presupuesto` en esas mutaciones.
+**Invalidación cruzada.** El backend recalcula el presupuesto cuando se toca el itinerario, cuando se elige un vuelo/alojamiento y cuando se editan las fechas de un viaje (el alojamiento se cobra por noche). Los hooks invalidan `presupuesto` en esas mutaciones.
+
+**Autocompletado de lugares.** `GET /lugares/buscar` **no filtra por texto**: recibe un destino y dispara ocho búsquedas a Google Places, una por categoría. Por eso `useLugares` arranca desactivado hasta que el usuario escribe, cachea el resultado con `staleTime: Infinity` y filtra en el cliente. Al elegir un lugar se manda `id_lugar`, así la actividad nace con coordenadas reales en vez de depender del geocoding por nombre.
+
+**Formularios compartidos.** El formulario de viaje vive en `components/viajes/viaje-form.tsx` (schema, campos y `useViajeForm`) y lo usan tanto el wizard de creación como el diálogo de edición. Radix desmonta el contenido de un `Dialog` al cerrarlo, así que el formulario se remonta con los valores del viaje y no hay que resetearlo a mano.
 
 **Manejo global de 401.** Un 401 en una *query* significa sesión vencida: `QueryCache.onError` limpia la caché y manda a `/login`. Va **solo en las queries, nunca en las mutaciones**, porque el backend usa 401 también para "la contraseña actual es incorrecta" (al cambiar la contraseña o borrar la cuenta) y ahí expulsar al usuario sería un bug.
 
@@ -107,6 +111,6 @@ frontend/
 
 ## Estado
 
-Fases 0 a 5 completas: auth, dashboard, wizard de creación, itinerario generado y editable, mapa, presupuesto, vuelos y alojamiento, gestión de cuenta, errores globales y responsive.
+Fases 0 a 6 completas: auth, dashboard, wizard de creación, edición del viaje y de su estado, itinerario generado y editable, autocompletado de lugares reales, mapa, presupuesto, vuelos y alojamiento, gestión de cuenta, errores globales y responsive.
 
-Lo que falta está documentado en `PLAN_FRONTEND.md` (documento vivo, no versionado): editar un viaje, autocompletado de lugares reales al agregar actividades, y cambiar el estado del viaje.
+Las mejoras pendientes están documentadas en `PLAN_FRONTEND.md` (documento vivo, no versionado).

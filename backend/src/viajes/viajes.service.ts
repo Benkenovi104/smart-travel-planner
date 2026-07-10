@@ -2,8 +2,10 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { PresupuestosService } from '../presupuestos/presupuestos.service.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { CreateViajeDto } from './dto/create-viaje.dto.js';
 import { UpdateViajeDto } from './dto/update-viaje.dto.js';
@@ -30,10 +32,19 @@ const VIAJE_SELECT = {
 
 @Injectable()
 export class ViajesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly presupuestos: PresupuestosService,
+  ) {}
 
   async create(id_usuario: number, dto: CreateViajeDto) {
     const { intereses, ...data } = dto;
+
+    if (new Date(data.fecha_fin) < new Date(data.fecha_inicio)) {
+      throw new BadRequestException(
+        'La fecha de fin debe ser igual o posterior a la de inicio',
+      );
+    }
 
     return this.prisma.viaje.create({
       data: {
@@ -77,34 +88,62 @@ export class ViajesService {
   }
 
   async update(id_usuario: number, id_viaje: number, dto: UpdateViajeDto) {
-    await this.findOne(id_usuario, id_viaje);
+    const actual = await this.findOne(id_usuario, id_viaje);
 
     const { intereses, ...data } = dto;
 
-    return this.prisma.viaje.update({
-      where: { id_viaje },
-      data: {
-        ...(data.origen && { origen: data.origen }),
-        ...(data.destino_principal && {
-          destino_principal: data.destino_principal,
-        }),
-        ...(data.fecha_inicio && { fechaInicio: new Date(data.fecha_inicio) }),
-        ...(data.fecha_fin && { fechaFin: new Date(data.fecha_fin) }),
-        ...(data.cantidad_personas !== undefined && {
-          cantidadPersonas: data.cantidad_personas,
-        }),
-        ...(data.presupuesto_total !== undefined && {
-          presupuestoTotal: data.presupuesto_total,
-        }),
-        ...(data.estado && { estado: data.estado }),
-        ...(intereses && {
-          viaje_intereses: {
-            deleteMany: {},
-            create: intereses.map((id_interes) => ({ id_interes })),
-          },
-        }),
-      },
-      select: VIAJE_SELECT,
+    // Las fechas se validan contra las que van a quedar, no sólo contra las que
+    // vienen en el DTO: mandar sólo `fecha_fin` también puede invertir el rango.
+    const fechaInicio = data.fecha_inicio
+      ? new Date(data.fecha_inicio)
+      : actual.fechaInicio;
+    const fechaFin = data.fecha_fin ? new Date(data.fecha_fin) : actual.fechaFin;
+
+    if (fechaFin < fechaInicio) {
+      throw new BadRequestException(
+        'La fecha de fin debe ser igual o posterior a la de inicio',
+      );
+    }
+
+    // Cambiar las fechas cambia la cantidad de noches, y `monto_alojamiento`
+    // está persistido en la tabla `presupuestos`: sin recalcular quedaría
+    // desfasado hasta la próxima edición del itinerario.
+    const cambianLasFechas =
+      fechaInicio.getTime() !== actual.fechaInicio.getTime() ||
+      fechaFin.getTime() !== actual.fechaFin.getTime();
+
+    return this.prisma.$transaction(async (tx) => {
+      const viaje = await tx.viaje.update({
+        where: { id_viaje },
+        data: {
+          ...(data.origen && { origen: data.origen }),
+          ...(data.destino_principal && {
+            destino_principal: data.destino_principal,
+          }),
+          ...(data.fecha_inicio && { fechaInicio }),
+          ...(data.fecha_fin && { fechaFin }),
+          ...(data.cantidad_personas !== undefined && {
+            cantidadPersonas: data.cantidad_personas,
+          }),
+          ...(data.presupuesto_total !== undefined && {
+            presupuestoTotal: data.presupuesto_total,
+          }),
+          ...(data.estado && { estado: data.estado }),
+          ...(intereses && {
+            viaje_intereses: {
+              deleteMany: {},
+              create: intereses.map((id_interes) => ({ id_interes })),
+            },
+          }),
+        },
+        select: VIAJE_SELECT,
+      });
+
+      if (cambianLasFechas) {
+        await this.presupuestos.recalcularConTx(tx, id_viaje);
+      }
+
+      return viaje;
     });
   }
 

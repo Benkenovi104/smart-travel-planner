@@ -90,19 +90,19 @@ Con el servidor corriendo:
 |---|---|---|
 | `auth` | `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/change-password`, `POST /api/auth/forgot-password`, `POST /api/auth/reset-password` | Registro/login con JWT (bcrypt, 7 días). Cambio de contraseña (autenticado) y recuperación por email (token SHA-256 con vencimiento de 1h). Rate limit de 5 intentos/minuto. |
 | `usuarios` | `/api/usuarios/*` | Perfil propio, perfil de viajero (ritmo, presupuesto, tipo), catálogo e intereses del usuario, y **borrado de cuenta** (`DELETE /api/usuarios/me`, con confirmación de contraseña y cascade completo). |
-| `viajes` | `/api/viajes/*` | CRUD de viajes, scopeado por usuario, con intereses específicos por viaje. |
+| `viajes` | `/api/viajes/*` | CRUD de viajes, scopeado por usuario, con intereses específicos por viaje. `PATCH /api/viajes/:id` también cambia el `estado` (validado contra `dto/estados-viaje.ts`) y, si cambian las fechas, **recalcula el presupuesto** en la misma transacción, porque `monto_alojamiento` depende de la cantidad de noches. |
 | `itinerarios` | `/api/viajes/:idViaje/itinerario/*` | Generación de itinerario con IA (Gemini), consulta, y edición manual: agregar/editar/eliminar/mover actividades entre días, con historial de cambios (`GET .../cambios`). `POST .../geocodificar` ubica por lotes las actividades sin coordenadas. |
 | `presupuestos` | `GET /api/viajes/:idViaje/presupuesto` | Desglose por categoría + detalle de gastos, recalculado automáticamente al mutar el itinerario o al elegir vuelo/alojamiento. |
 | `lugares` | `GET /api/lugares/buscar` | Búsqueda de lugares turísticos reales (Google Places), cacheados en la tabla `lugares` y reutilizados como contexto al generar itinerarios. También expone el geocoding con Nominatim/OSM (sin API key). |
 | `vuelos` | `/api/viajes/:idViaje/vuelos/*` | Busca opciones reales (Sky Scrapper, ida y vuelta combinadas) y las guarda en `opciones_vuelo` ordenadas por precio. `PATCH .../:idVuelo/seleccionar` elige una (exclusiva por viaje) y recalcula el presupuesto. |
-| `alojamiento` | `/api/viajes/:idViaje/alojamiento/*` | Ídem con Booking.com, ordenadas por precio por noche. `PATCH .../:idAlojamiento/seleccionar` elige una y suma `precio_por_noche × noches` al presupuesto. |
+| `alojamiento` | `/api/viajes/:idViaje/alojamiento/*` | Ídem con Booking.com, ordenadas por precio por noche. La búsqueda pide una habitación doble cada dos personas (`habitacionesPara`). `PATCH .../:idAlojamiento/seleccionar` elige una y suma `precio_por_noche × noches` al presupuesto. |
 
 Todos los endpoints salvo `auth` y `health` requieren `Authorization: Bearer <token>` (`JwtAuthGuard`). La estrategia JWT **verifica contra la base que el usuario siga existiendo**: el token de una cuenta borrada da 401 de inmediato, sin esperar a que venza.
 
 ### Dos reglas de dominio que conviene conocer
 
 - **El alojamiento no es una actividad del itinerario**, sino un costo del viaje. `alojamiento` no es un `tipo_actividad` válido (ver `itinerarios/dto/tipos-actividad.ts`); el usuario elige un hotel por viaje y de ahí sale `monto_alojamiento`. Se le pide a Gemini que no lo genere **y además se filtra al persistir**, porque el modelo ignora la instrucción con frecuencia.
-- **Los precios ya vienen calculados para todo el grupo.** `OpcionVuelo.precio` es el total ida+vuelta (la búsqueda consulta la API con `cantidadPersonas` adultos) y `precio_por_noche` también está prorrateado. **No hay que multiplicar por la cantidad de personas.**
+- **Los precios ya vienen calculados para todo el grupo.** `OpcionVuelo.precio` es el total ida+vuelta (la búsqueda consulta la API con `cantidadPersonas` adultos) y `precio_por_noche` también está prorrateado. **No hay que multiplicar por la cantidad de personas.** Verificado contra la API de Booking: `grossPrice.value` es el total de la estadía completa (4 noches cuestan exactamente 4× lo que 1 noche), y `room_qty` no altera el precio de una propiedad — sólo cambia qué propiedades tienen disponibilidad.
 
 > Nota: los datos de vuelos/alojamiento vienen de mirrors no oficiales de Skyscanner y Booking.com en RapidAPI — son informativos/de simulación, no hay integración de reserva real. Para desarrollar sin gastar cuota, ver `RAPIDAPI_MOCK`.
 
@@ -113,7 +113,7 @@ npm test           # unitarios (~3s)
 npm run test:e2e   # end-to-end (~90s, hace 1 llamada real a Gemini)
 ```
 
-- **Unitarios** (9 suites, 49 tests): cada service aislado, mockeando Prisma y las APIs externas (Gemini/Google/RapidAPI/Mail) por inyección de dependencias; bcrypt/crypto corren reales. Cubren auth (register/login/cambio/forgot/reset), la estrategia JWT (rechaza tokens de cuentas borradas), borrado de cuenta con cascade, IDOR en viajes, matemática del presupuesto (incluidos vuelo y alojamiento elegidos), ranking y selección de vuelos/alojamiento, y los guards de itinerarios.
+- **Unitarios** (10 suites, 58 tests): cada service aislado, mockeando Prisma y las APIs externas (Gemini/Google/RapidAPI/Mail) por inyección de dependencias; bcrypt/crypto corren reales. Cubren auth (register/login/cambio/forgot/reset), la estrategia JWT (rechaza tokens de cuentas borradas), borrado de cuenta con cascade, IDOR y edición de viajes (validación del rango de fechas, recálculo del presupuesto), matemática del presupuesto (incluidos vuelo y alojamiento elegidos), ranking y selección de vuelos/alojamiento, y los guards de itinerarios.
 - **E2E** (`test/main-flow.e2e-spec.ts`): bootstrapea la `AppModule` real y recorre el flujo completo **contra la base configurada en `.env`** con **Gemini real** y `RAPIDAPI_MOCK=true`: registro → login → crear viaje → generar itinerario con IA → presupuesto → vuelos/alojamiento → IDOR 403. Crea y borra sus propios usuarios (se autolimpia).
 
 ## Base de datos

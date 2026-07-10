@@ -87,6 +87,22 @@ describe('AlojamientoService', () => {
     expect(creados[0].nombre).toBe('Barato');
   });
 
+  it('pide una habitación doble cada dos personas', async () => {
+    prisma.viaje.findUnique.mockResolvedValue({ ...viaje, cantidadPersonas: 5 });
+    booking.resolverDestino.mockResolvedValue({ destId: 'X', searchType: 'city' });
+    booking.buscarHoteles.mockResolvedValue([]);
+    prisma.opcionAlojamiento.findMany.mockResolvedValue([]);
+    prisma.$transaction.mockImplementation(async (cb: any) =>
+      cb({ opcionAlojamiento: { deleteMany: jest.fn(), createMany: jest.fn() } }),
+    );
+
+    await service.buscarYGuardar(1, 5);
+
+    expect(booking.buscarHoteles).toHaveBeenCalledWith(
+      expect.objectContaining({ adultos: 5, habitaciones: 3 }),
+    );
+  });
+
   describe('seleccionar', () => {
     it('deselecciona las demás opciones del viaje y recalcula el presupuesto', async () => {
       prisma.viaje.findUnique.mockResolvedValue(viaje);

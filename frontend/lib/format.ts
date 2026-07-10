@@ -53,6 +53,15 @@ export function diasEntre(
   return Math.max(0, Math.round((b.getTime() - a.getTime()) / 86_400_000));
 }
 
+/**
+ * ISO completo -> "YYYY-MM-DD", el único formato que acepta `<input type="date">`.
+ * El backend guarda las fechas a medianoche UTC, así que se recorta el string en
+ * vez de usar getters locales, que en husos negativos devuelven el día anterior.
+ */
+export function toDateInput(iso: string | null | undefined): string {
+  return iso ? iso.slice(0, 10) : '';
+}
+
 export function formatMoney(n: number | null | undefined): string {
   if (n == null) return '—';
   return `$ ${NUM_FMT.format(n)}`;

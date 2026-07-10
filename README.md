@@ -51,6 +51,7 @@ Un usuario con intereses generales en gastronomía y cultura puede priorizar nie
 | Estimación de presupuesto | ✅ | Desglose por vuelos, alojamiento, comidas, transporte y actividades, más detalle por gasto |
 | Vuelos y alojamiento | ✅ | Consulta de opciones vía APIs externas (sin reserva real); la opción elegida suma al presupuesto |
 | Edición del itinerario | ✅ | Agregar, eliminar, mover entre días y reordenar con drag & drop, con historial de cambios |
+| Edición del viaje | ✅ | Cambiar fechas, personas, presupuesto, intereses y estado; el presupuesto se recalcula solo |
 | Guardado de viajes | ✅ | Acceso futuro y reutilización de preferencias |
 | Optimización de rutas | ⏳ | Pendiente. El orden lo decide la IA al generar; todavía no hay una heurística tipo TSP que minimice traslados |
 
@@ -210,9 +211,9 @@ Arranca en `http://localhost:3001`. Necesita el backend corriendo.
 - [x] Componentes de UI, manejo global de errores y diseño responsive
 - [x] Tests unitarios y e2e del backend
 - [x] Configuración Docker (backend + Postgres)
+- [x] Editar un viaje ya creado (fechas, personas, presupuesto, estado), con recálculo del presupuesto
+- [x] Autocompletado de lugares reales al agregar una actividad
 - [ ] **Optimización de recorridos (heurísticas tipo TSP)** — no implementada: hoy el orden de las actividades dentro de cada día lo decide la IA al generar el itinerario, y el usuario lo puede reordenar a mano
-- [ ] Editar un viaje ya creado (fechas, personas, presupuesto, estado)
-- [ ] Autocompletado de lugares reales al agregar una actividad
 
 ## Futuras Mejoras
 

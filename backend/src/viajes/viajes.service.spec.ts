@@ -1,12 +1,18 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { describe, beforeEach, afterEach, it, expect, jest } from '@jest/globals';
 import { ViajesService } from './viajes.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { PresupuestosService } from '../presupuestos/presupuestos.service.js';
 
 describe('ViajesService', () => {
   let service: ViajesService;
   let prisma: any;
+  let presupuestos: any;
 
   beforeEach(async () => {
     prisma = {
@@ -17,8 +23,13 @@ describe('ViajesService', () => {
       },
       $transaction: jest.fn(),
     };
+    presupuestos = { recalcularConTx: jest.fn() };
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ViajesService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        ViajesService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: PresupuestosService, useValue: presupuestos },
+      ],
     }).compile();
     service = module.get<ViajesService>(ViajesService);
   });
@@ -62,6 +73,64 @@ describe('ViajesService', () => {
       expect(arg.data.estado).toBe('planificado');
       expect(arg.data.fechaInicio).toBeInstanceOf(Date);
       expect(arg.data.fechaFin).toBeInstanceOf(Date);
+    });
+
+    it('rechaza un rango de fechas invertido', async () => {
+      await expect(
+        service.create(1, {
+          origen: 'Buenos Aires',
+          destino_principal: 'Mendoza',
+          fecha_inicio: '2026-09-12',
+          fecha_fin: '2026-09-10',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.viaje.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('update', () => {
+    const viajeActual = {
+      id_usuario: 1,
+      id_viaje: 5,
+      fechaInicio: new Date('2026-09-10'),
+      fechaFin: new Date('2026-09-15'),
+    };
+
+    function mockTx() {
+      const tx = { viaje: { update: jest.fn<any>().mockResolvedValue({ id_viaje: 5 }) } };
+      prisma.$transaction.mockImplementation(async (cb: any) => cb(tx));
+      return tx;
+    }
+
+    beforeEach(() => prisma.viaje.findUnique.mockResolvedValue(viajeActual));
+
+    it('recalcula el presupuesto cuando cambian las fechas', async () => {
+      const tx = mockTx();
+      await service.update(1, 5, { fecha_fin: '2026-09-20' });
+      expect(tx.viaje.update).toHaveBeenCalled();
+      expect(presupuestos.recalcularConTx).toHaveBeenCalledWith(tx, 5);
+    });
+
+    it('no recalcula si las fechas no cambian', async () => {
+      mockTx();
+      await service.update(1, 5, { estado: 'completado' });
+      expect(presupuestos.recalcularConTx).not.toHaveBeenCalled();
+    });
+
+    it('valida el rango contra las fechas ya guardadas, no sólo contra el DTO', async () => {
+      // Sólo llega `fecha_fin`, y queda antes de la `fecha_inicio` persistida.
+      await expect(
+        service.update(1, 5, { fecha_fin: '2026-09-01' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('no deja editar el viaje de otro usuario (IDOR)', async () => {
+      prisma.viaje.findUnique.mockResolvedValue({ ...viajeActual, id_usuario: 2 });
+      await expect(
+        service.update(1, 5, { estado: 'completado' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
   });
 

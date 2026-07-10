@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { BookingService } from './booking.service.js';
+import { BookingService, habitacionesPara } from './booking.service.js';
 import { PresupuestosService } from '../presupuestos/presupuestos.service.js';
 
 const MAX_OPCIONES = 5;
@@ -40,11 +40,14 @@ export class AlojamientoService {
       ),
     );
 
+    const personas = viaje.cantidadPersonas ?? 1;
+
     const hoteles = await this.booking.buscarHoteles({
       destino,
       fechaEntrada,
       fechaSalida,
-      adultos: viaje.cantidadPersonas ?? 1,
+      adultos: personas,
+      habitaciones: habitacionesPara(personas),
     });
 
     // Rankeamos por precio por noche ascendente (criterio: ajuste al presupuesto).
@@ -52,6 +55,8 @@ export class AlojamientoService {
       (a, b) => a.precioTotal / noches - b.precioTotal / noches,
     );
 
+    // `precioTotal` es la estadía completa para todo el grupo, así que dividir por
+    // noches deja un precio por noche ya prorrateado: no se multiplica por personas.
     const opciones = ordenados.slice(0, MAX_OPCIONES).map((h) => ({
       id_viaje,
       nombre: h.nombre,

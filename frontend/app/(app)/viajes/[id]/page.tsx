@@ -43,7 +43,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { EstadoBadge } from '@/components/viajes/estado-badge';
+import { EstadoSelect } from '@/components/viajes/estado-select';
+import { EditarViajeDialog } from '@/components/viajes/editar-viaje-dialog';
 import { EditableItinerario } from '@/components/itinerario/editable-itinerario';
 import { HistorialCambios } from '@/components/itinerario/historial-cambios';
 import { MapaSection } from '@/components/mapa/mapa-section';
@@ -158,43 +159,50 @@ export default function ViajeDetallePage() {
       {/* Encabezado */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <h1 className="text-2xl font-semibold">{viaje.destinoPrincipal}</h1>
-            <EstadoBadge estado={viaje.estado} />
+            <EstadoSelect idViaje={id} estado={viaje.estado} />
           </div>
           <p className="text-muted-foreground text-sm">desde {viaje.origen}</p>
         </div>
 
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button variant="outline" size="sm">
-              <Trash2 className="size-4" />
-              Eliminar
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>¿Eliminar este viaje?</DialogTitle>
-              <DialogDescription>
-                Se borrará el viaje junto con su itinerario. Esta acción no se
-                puede deshacer.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button variant="outline">Cancelar</Button>
-              </DialogClose>
-              <Button
-                variant="destructive"
-                onClick={onEliminar}
-                disabled={eliminar.isPending}
-              >
-                {eliminar.isPending && <Loader2 className="animate-spin" />}
+        <div className="flex items-center gap-2">
+          <EditarViajeDialog
+            viaje={viaje}
+            tieneItinerario={Boolean(itinerario.data)}
+          />
+
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm">
+                <Trash2 className="size-4" />
                 Eliminar
               </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>¿Eliminar este viaje?</DialogTitle>
+                <DialogDescription>
+                  Se borrará el viaje junto con su itinerario. Esta acción no se
+                  puede deshacer.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button variant="outline">Cancelar</Button>
+                </DialogClose>
+                <Button
+                  variant="destructive"
+                  onClick={onEliminar}
+                  disabled={eliminar.isPending}
+                >
+                  {eliminar.isPending && <Loader2 className="animate-spin" />}
+                  Eliminar
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Resumen */}
