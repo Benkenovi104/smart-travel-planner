@@ -84,12 +84,17 @@ export class ItinerariosService {
       });
     }
 
-    // Días que sobreviven: se recalcula su fecha (el numeroDia no cambia).
+    // Días que sobreviven: se reescribe su fecha sólo si cambió. Cuando sólo se
+    // movió `fecha_fin` (acortar/alargar), `fecha_inicio` no cambia y las fechas
+    // de estos días quedan iguales, así que no se toca ninguno: menos queries
+    // dentro de la transacción, que contra una base remota es lo que importa.
     for (const dia of dias) {
       if (dia.numeroDia > totalDias) continue;
+      const nueva = fechaDeDia(dia.numeroDia);
+      if (dia.fecha && nueva.getTime() === dia.fecha.getTime()) continue;
       await tx.diaItinerario.update({
         where: { id_dia_itinerario: dia.id_dia_itinerario },
-        data: { fecha: fechaDeDia(dia.numeroDia) },
+        data: { fecha: nueva },
       });
     }
 

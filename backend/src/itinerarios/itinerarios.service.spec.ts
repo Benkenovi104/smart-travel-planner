@@ -82,6 +82,9 @@ describe('ItinerariosService', () => {
             (numerosDia ?? []).map((n) => ({
               id_dia_itinerario: n * 10,
               numeroDia: n,
+              // Fecha actual del día: inicio 10/09 + (n-1) días. Sirve para que
+              // reajustar detecte cuándo la fecha NO cambió y se saltee el update.
+              fecha: new Date(Date.UTC(2026, 8, 9 + n)),
             })),
           ),
           update: jest.fn<any>(({ where, data }: any) => {
@@ -115,11 +118,9 @@ describe('ItinerariosService', () => {
       expect(tx.actividadItinerario.deleteMany).toHaveBeenCalledWith({
         where: { id_dia_itinerario: { in: [30, 40] } },
       });
-      // días 1 y 2 sobreviven y se recalcula su fecha
-      expect(updates.map((u) => iso(u.fecha))).toEqual([
-        '2026-09-10',
-        '2026-09-11',
-      ]);
+      // días 1 y 2 sobreviven con la misma fecha (sólo se movió fecha_fin), así
+      // que no se toca ninguno.
+      expect(updates).toEqual([]);
       expect(tx.diaItinerario.create).not.toHaveBeenCalled();
     });
 

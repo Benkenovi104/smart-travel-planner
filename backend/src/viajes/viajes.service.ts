@@ -154,7 +154,11 @@ export class ViajesService {
       }
 
       return viaje;
-    });
+    },
+    // Reajustar el itinerario + recalcular el presupuesto son muchas queries
+    // secuenciales; contra una base remota (Supabase) el default de 5s de la
+    // transacción no alcanza. Mismo criterio que `generar` en itinerarios.
+    { timeout: 20_000, maxWait: 10_000 });
   }
 
   async remove(id_usuario: number, id_viaje: number) {
