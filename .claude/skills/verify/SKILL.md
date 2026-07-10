@@ -46,10 +46,19 @@ del diálogo). Scopeá con `page.getByRole('dialog').getByRole('button', ...)`.
 
 ## Trampas del entorno
 
-- **`GEMINI_API_KEY` está vacía** en `backend/.env`, así que `POST
-  /viajes/:id/itinerario/generar` devuelve 500 (el SDK sin key cae a Vertex AI y
-  da 401 `CREDENTIALS_MISSING`). Para ejercitar el itinerario, sembralo directo en
-  la DB con Prisma en vez de generarlo.
+- **Claude Code inyecta variables de Vertex AI en sus procesos** (`GOOGLE_GENAI_USE_VERTEXAI=true`,
+  `GOOGLE_CLOUD_PROJECT`, `GOOGLE_VERTEX_BASE_URL`, `GOOGLE_API_KEY`). `@google/genai` las mira
+  **antes** que el `apiKey`, se va a `aiplatform.googleapis.com` e ignora `GEMINI_API_KEY`; Vertex
+  rechaza las API keys y `POST /viajes/:id/itinerario/generar` devuelve 500. Levantá el backend
+  limpiándolas, o vas a diagnosticar un bug que no existe:
+
+  ```bash
+  env -u GOOGLE_GENAI_USE_VERTEXAI -u GOOGLE_CLOUD_PROJECT -u GOOGLE_CLOUD_LOCATION \
+      -u GOOGLE_VERTEX_BASE_URL -u GOOGLE_API_KEY node dist/src/main
+  ```
+
+  Generar un itinerario tarda ~50s y gasta cuota de Gemini. Si sólo necesitás días para colgar
+  actividades, sembralos con Prisma en vez de generarlos.
 - Prisma se instancia con un adapter, no con la URL sola:
   `new PrismaClient({ adapter: new PrismaPg(new Pool({ connectionString })) })`.
   El client compilado vive en `backend/dist/generated/prisma/client.js`

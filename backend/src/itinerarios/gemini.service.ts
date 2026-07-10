@@ -37,7 +37,13 @@ export class GeminiService {
   private readonly client: GoogleGenAI;
 
   constructor() {
-    this.client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+    // `vertexai: false` explícito: si no, el SDK mira `GOOGLE_GENAI_USE_VERTEXAI`
+    // del ambiente antes que el apiKey, se va a Vertex AI e ignora la key. Vertex
+    // rechaza las API keys (401 CREDENTIALS_MISSING) y generar itinerario rompe.
+    this.client = new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY!,
+      vertexai: false,
+    });
   }
 
   async generarItinerario(params: {
