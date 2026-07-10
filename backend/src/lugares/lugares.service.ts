@@ -66,22 +66,50 @@ export class LugaresService {
 
     return Promise.all(
       pois.map(async (poi, i) => {
-        const existente = encontrados[i];
-        if (existente) return existente;
+        const datos = {
+          nombre: poi.nombre,
+          ciudad: poi.ciudad,
+          pais: poi.pais,
+          direccion: poi.direccion,
+          latitud: poi.latitud,
+          longitud: poi.longitud,
+          categoria: poi.categoria,
+          rating: poi.rating,
+          fuente_api: 'google_places',
+        };
 
-        return this.prisma.lugar.create({
-          data: {
-            nombre: poi.nombre,
-            ciudad: poi.ciudad,
-            pais: poi.pais,
-            direccion: poi.direccion,
-            latitud: poi.latitud,
-            longitud: poi.longitud,
-            categoria: poi.categoria,
-            fuente_api: 'google_places',
-          },
-        });
+        const existente = encontrados[i];
+        // Si el lugar ya estaba (típicamente creado por la IA al generar un
+        // itinerario, sin rating ni categoría real), lo refrescamos con los
+        // datos de Places en vez de devolverlo tal cual. Así el autocompletado
+        // muestra rating y categoría reales.
+        if (existente) {
+          return this.prisma.lugar.update({
+            where: { id_lugar: existente.id_lugar },
+            data: datos,
+          });
+        }
+
+        return this.prisma.lugar.create({ data: datos });
       }),
     );
+  }
+
+  /**
+   * Búsqueda por texto sobre los lugares YA cacheados (tabla `lugares`), sin
+   * pegarle a Google Places. Barata (una query) y pensada para el autocompletado
+   * al agregar una actividad: `buscarYCachear` es el fallback cuando esto no
+   * encuentra nada (destino nunca buscado).
+   */
+  async buscarEnCache(texto: string, destino?: string): Promise<Lugar[]> {
+    const ciudad = destino?.split(',')[0].trim();
+    return this.prisma.lugar.findMany({
+      where: {
+        nombre: { contains: texto, mode: 'insensitive' },
+        ...(ciudad && { ciudad: { equals: ciudad, mode: 'insensitive' } }),
+      },
+      orderBy: [{ rating: { sort: 'desc', nulls: 'last' } }, { nombre: 'asc' }],
+      take: 10,
+    });
   }
 }

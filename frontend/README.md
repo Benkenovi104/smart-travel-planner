@@ -99,7 +99,7 @@ frontend/
 
 **Invalidación cruzada.** El backend recalcula el presupuesto cuando se toca el itinerario, cuando se elige un vuelo/alojamiento y cuando se editan las fechas de un viaje (el alojamiento se cobra por noche). Los hooks invalidan `presupuesto` en esas mutaciones.
 
-**Autocompletado de lugares.** `GET /lugares/buscar` **no filtra por texto**: recibe un destino y dispara ocho búsquedas a Google Places, una por categoría. Por eso `useLugares` arranca desactivado hasta que el usuario escribe, cachea el resultado con `staleTime: Infinity` y filtra en el cliente. Al elegir un lugar se manda `id_lugar`, así la actividad nace con coordenadas reales en vez de depender del geocoding por nombre.
+**Autocompletado de lugares (dos niveles).** Al escribir, el autocompletado pega primero a `GET /lugares?q=` (búsqueda por texto sobre lo ya cacheado, una query barata, con debounce). Sólo si ese endpoint vuelve vacío —un destino nunca buscado— cae al fallback `GET /lugares/buscar`, que dispara ocho búsquedas a Google Places (2-4s) y deja todo cacheado para la próxima. Al elegir un lugar se manda `id_lugar`, así la actividad nace con coordenadas, categoría y rating reales en vez de depender del geocoding por nombre.
 
 **Formularios compartidos.** El formulario de viaje vive en `components/viajes/viaje-form.tsx` (schema, campos y `useViajeForm`) y lo usan tanto el wizard de creación como el diálogo de edición. Radix desmonta el contenido de un `Dialog` al cerrarlo, así que el formulario se remonta con los valores del viaje y no hay que resetearlo a mano.
 

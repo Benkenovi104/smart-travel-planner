@@ -8,16 +8,19 @@ export interface PoiGoogle {
   latitud: number;
   longitud: number;
   categoria: string;
+  rating: number | null;
 }
 
 interface PlaceGoogle {
   displayName?: { text: string };
   formattedAddress?: string;
   location?: { latitude: number; longitude: number };
+  rating?: number;
 }
 
 const TEXT_SEARCH_URL = 'https://places.googleapis.com/v1/places:searchText';
-const FIELD_MASK = 'places.displayName,places.formattedAddress,places.location';
+const FIELD_MASK =
+  'places.displayName,places.formattedAddress,places.location,places.rating';
 
 @Injectable()
 export class GooglePlacesService {
@@ -74,6 +77,7 @@ export class GooglePlacesService {
         latitud: p.location!.latitude,
         longitud: p.location!.longitude,
         categoria,
+        rating: p.rating ?? null,
       }));
   }
 }

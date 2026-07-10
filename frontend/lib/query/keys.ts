@@ -4,6 +4,8 @@ export const qk = {
   intereses: ['intereses'] as const,
   misIntereses: ['me', 'intereses'] as const,
   lugares: (destino: string) => ['lugares', destino] as const,
+  lugaresCache: (destino: string, q: string) =>
+    ['lugares', 'cache', destino, q] as const,
   viajes: ['viajes'] as const,
   viaje: (id: number) => ['viajes', id] as const,
   itinerario: (id: number) => ['viajes', id, 'itinerario'] as const,

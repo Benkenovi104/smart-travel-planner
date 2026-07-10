@@ -1,13 +1,13 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, MapPin, Search, Star, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { useLugares } from '@/lib/query/use-lugares';
+import { useLugares, useLugaresCache } from '@/lib/query/use-lugares';
 import type { Lugar } from '@/lib/types/models';
 
 /** Minúsculas y sin tildes, para que "cafe" matchee "Café". */
@@ -45,20 +45,39 @@ export function LugarAutocomplete({
   const [resaltado, setResaltado] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // La búsqueda al backend recién arranca cuando hay algo escrito: cada llamada
-  // son 8 requests a Google Places.
-  const buscar = value.trim().length >= MIN_CHARS && !seleccionado;
-  const { data: lugares, isFetching, isError } = useLugares(destino, buscar);
+  const q = value.trim();
+  const activo = q.length >= MIN_CHARS && !seleccionado;
+
+  // Debounce del texto para no pegarle a la base en cada tecla.
+  const [qDebounced, setQDebounced] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setQDebounced(q), 250);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  // Primero la caché (una query barata). Si el destino nunca se buscó, la caché
+  // vuelve vacía y ahí sí caemos al fallback contra Google Places (8 llamadas),
+  // que además deja todo cacheado para las próximas búsquedas.
+  const cache = useLugaresCache(destino, qDebounced, activo);
+  const cacheVacia = cache.isSuccess && cache.data.length === 0;
+  const full = useLugares(destino, activo && cacheVacia);
 
   const resultados = useMemo(() => {
-    if (!lugares) return [];
-    const q = plano(value.trim());
-    return lugares
-      .filter((l) => plano(l.nombre).includes(q))
-      .slice(0, MAX_RESULTADOS);
-  }, [lugares, value]);
+    if (cache.data && cache.data.length > 0) {
+      return cache.data.slice(0, MAX_RESULTADOS);
+    }
+    if (full.data) {
+      const nq = plano(qDebounced);
+      return full.data
+        .filter((l) => plano(l.nombre).includes(nq))
+        .slice(0, MAX_RESULTADOS);
+    }
+    return [];
+  }, [cache.data, full.data, qDebounced]);
 
-  const mostrarLista = abierto && buscar;
+  const isFetching = cache.isFetching || full.isFetching;
+  const isError = cache.isError || full.isError;
+  const mostrarLista = abierto && activo;
 
   function elegir(lugar: Lugar) {
     onSeleccionar(lugar);
