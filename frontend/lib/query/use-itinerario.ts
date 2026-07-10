@@ -115,6 +115,14 @@ export function useEliminarActividad(idViaje: number) {
   });
 }
 
+export function useOptimizarDia(idViaje: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (idDia: number) => api.optimizarDia(idViaje, idDia),
+    onSuccess: () => invalidarItinerario(qc, idViaje),
+  });
+}
+
 export function useGeocodificar(idViaje: number) {
   const qc = useQueryClient();
   return useMutation({

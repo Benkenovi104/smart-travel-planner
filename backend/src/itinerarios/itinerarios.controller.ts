@@ -117,6 +117,28 @@ export class ItinerariosController {
     );
   }
 
+  @Post('dias/:idDia/optimizar')
+  @ApiOperation({
+    summary:
+      'Optimizar el recorrido de un día: reordena las paradas por cercanía y corre los horarios',
+  })
+  @ApiResponse({ status: 404, description: 'Día no encontrado.' })
+  @ApiResponse({
+    status: 400,
+    description: 'No hay suficientes actividades con ubicación.',
+  })
+  optimizarDia(
+    @Request() req,
+    @Param('idViaje', ParseIntPipe) idViaje: number,
+    @Param('idDia', ParseIntPipe) idDia: number,
+  ) {
+    return this.itinerariosService.optimizarDia(
+      req.user.id_usuario,
+      idViaje,
+      idDia,
+    );
+  }
+
   @Get('cambios')
   @ApiOperation({
     summary: 'Ver historial de cambios manuales del itinerario',

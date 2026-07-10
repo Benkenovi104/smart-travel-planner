@@ -94,6 +94,13 @@ export function moverActividad(
   );
 }
 
+export function optimizarDia(idViaje: number, idDia: number) {
+  return apiFetch<{ optimizada: boolean }>(
+    `viajes/${idViaje}/itinerario/dias/${idDia}/optimizar`,
+    { method: 'POST' },
+  );
+}
+
 export interface GeocodificarResult {
   total: number;
   ubicados: number;

@@ -28,6 +28,7 @@ import {
   Loader2,
   Pencil,
   Plus,
+  Route,
   Trash2,
   Wallet,
 } from 'lucide-react';
@@ -51,6 +52,7 @@ import { formatFecha, formatHora, formatMoney } from '@/lib/format';
 import {
   useEliminarActividad,
   useMoverActividad,
+  useOptimizarDia,
 } from '@/lib/query/use-itinerario';
 import { ApiError } from '@/lib/api/client';
 import type { Actividad, Itinerario } from '@/lib/types/models';
@@ -241,6 +243,7 @@ function DiaColumn({
   onToggle: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `day-${dia.id}` });
+  const optimizar = useOptimizarDia(idViaje);
 
   // Total del día calculado desde las actividades (las canceladas no cuentan),
   // así se mantiene consistente con lo que se ve al editar/agregar/eliminar.
@@ -249,6 +252,27 @@ function DiaColumn({
     0,
   );
   const cantidad = dia.actividades.length;
+
+  // El backend necesita al menos 3 paradas ubicadas para tener algo que optimizar.
+  const conUbicacion = dia.actividades.filter(
+    (a) => a.lugar.lat != null && a.lugar.lng != null,
+  ).length;
+  const optimizable = conUbicacion >= 3;
+
+  function onOptimizar() {
+    optimizar.mutate(dia.id, {
+      onSuccess: (r) =>
+        toast.success(
+          r.optimizada
+            ? `Recorrido del día ${dia.numeroDia} optimizado`
+            : 'El recorrido ya era el más corto',
+        ),
+      onError: (e) =>
+        toast.error(
+          e instanceof ApiError ? e.message : 'No se pudo optimizar el recorrido',
+        ),
+    });
+  }
 
   return (
     <Card id={`dia-${dia.id}`} className="scroll-mt-20">
@@ -283,6 +307,22 @@ function DiaColumn({
               <span className="text-muted-foreground text-sm">
                 {formatMoney(totalDia)}
               </span>
+            )}
+            {optimizable && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onOptimizar}
+                disabled={optimizar.isPending}
+                title="Reordenar las paradas por cercanía"
+              >
+                {optimizar.isPending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Route className="size-4" />
+                )}
+                Optimizar
+              </Button>
             )}
             <AgregarActividadDialog idViaje={idViaje} idDia={dia.id}>
               <Button variant="outline" size="sm">

@@ -65,6 +65,82 @@ describe('ItinerariosService', () => {
     });
   });
 
+  describe('optimizarDia', () => {
+    // 4 paradas en línea (lng fijo, lat 0/3/1/2) en orden zigzag A,B,C,D.
+    // El recorrido más corto desde A es A -> C -> D -> B (lat 0,1,2,3).
+    const hora = (h: number) => new Date(`1970-01-01T${String(h).padStart(2, '0')}:00:00Z`);
+    function actividadesZigzag() {
+      return [
+        { id_actividad: 1, orden: 1, hora_inicio_estimada: hora(9), hora_fin_estimada: hora(10), lugares: { latitud: 0, longitud: 0, nombre: 'A' } },
+        { id_actividad: 2, orden: 2, hora_inicio_estimada: hora(10), hora_fin_estimada: hora(11), lugares: { latitud: 3, longitud: 0, nombre: 'B' } },
+        { id_actividad: 3, orden: 3, hora_inicio_estimada: hora(11), hora_fin_estimada: hora(12), lugares: { latitud: 1, longitud: 0, nombre: 'C' } },
+        { id_actividad: 4, orden: 4, hora_inicio_estimada: hora(12), hora_fin_estimada: hora(13), lugares: { latitud: 2, longitud: 0, nombre: 'D' } },
+      ];
+    }
+
+    function mockTx(actividades: any[]) {
+      const updates: any[] = [];
+      const tx = {
+        diaItinerario: {
+          findUnique: jest.fn<any>().mockResolvedValue({
+            id_dia_itinerario: 20,
+            id_itinerario: 1,
+            numeroDia: 2,
+          }),
+        },
+        actividadItinerario: {
+          findMany: jest.fn<any>().mockResolvedValue(actividades),
+          update: jest.fn<any>(({ where, data }: any) => {
+            updates.push({ id: where.id_actividad, ...data });
+          }),
+        },
+        cambioItinerario: { create: jest.fn<any>() },
+      };
+      prisma.viaje.findUnique.mockResolvedValue({ id_usuario: 1 });
+      prisma.itinerario.findUnique.mockResolvedValue({ id_itinerario: 1 });
+      prisma.$transaction = jest.fn<any>(async (cb: any) => cb(tx));
+      return { tx, updates };
+    }
+
+    it('reordena por cercanía y corre los horarios a la nueva secuencia', async () => {
+      const { updates } = mockTx(actividadesZigzag());
+      await service.optimizarDia(1, 5, 20);
+
+      // Orden esperado: A(1), C(3), D(4), B(2).
+      expect(updates.map((u) => u.id)).toEqual([1, 3, 4, 2]);
+      expect(updates.map((u) => u.orden)).toEqual([1, 2, 3, 4]);
+      // Las franjas horarias quedan en la misma secuencia (9,10,11,12), sólo
+      // cambia qué actividad ocupa cada una.
+      expect(updates.map((u) => u.hora_inicio_estimada.getUTCHours())).toEqual([
+        9, 10, 11, 12,
+      ]);
+    });
+
+    it('no escribe nada si el orden ya era óptimo', async () => {
+      // A, C, D, B ya es el recorrido óptimo.
+      const acts = actividadesZigzag();
+      const yaOptimo = [acts[0], acts[2], acts[3], acts[1]].map((a, i) => ({
+        ...a,
+        orden: i + 1,
+      }));
+      const { updates } = mockTx(yaOptimo);
+      const res = await service.optimizarDia(1, 5, 20);
+      expect(res.optimizada).toBe(false);
+      expect(updates).toEqual([]);
+    });
+
+    it('lanza BadRequest si hay menos de 3 actividades con ubicación', async () => {
+      const pocas = [
+        { id_actividad: 1, orden: 1, hora_inicio_estimada: null, hora_fin_estimada: null, lugares: { latitud: 0, longitud: 0, nombre: 'A' } },
+        { id_actividad: 2, orden: 2, hora_inicio_estimada: null, hora_fin_estimada: null, lugares: { latitud: null, longitud: null, nombre: 'sin coords' } },
+      ];
+      mockTx(pocas);
+      await expect(service.optimizarDia(1, 5, 20)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+    });
+  });
+
   describe('reajustarFechasEnTx', () => {
     // tx con los días indicados (numeroDia -> id_dia), que registra las llamadas.
     function mockTx(numerosDia: number[] | null) {

@@ -53,7 +53,7 @@ Un usuario con intereses generales en gastronomía y cultura puede priorizar nie
 | Edición del itinerario | ✅ | Agregar, eliminar, mover entre días y reordenar con drag & drop, con historial de cambios |
 | Edición del viaje | ✅ | Cambiar fechas, personas, presupuesto, intereses y estado; el presupuesto se recalcula solo |
 | Guardado de viajes | ✅ | Acceso futuro y reutilización de preferencias |
-| Optimización de rutas | ⏳ | Pendiente. El orden lo decide la IA al generar; todavía no hay una heurística tipo TSP que minimice traslados |
+| Optimización de rutas | ✅ | Botón "Optimizar" por día: reordena las paradas por cercanía (nearest-neighbor + 2-opt) y corre los horarios a la nueva secuencia |
 
 > **Nota:** Las integraciones de vuelos y alojamiento son informativas y de simulación. El objetivo académico del proyecto es la planificación inteligente del viaje, no la comercialización ni gestión de reservas reales.
 
@@ -213,7 +213,7 @@ Arranca en `http://localhost:3001`. Necesita el backend corriendo.
 - [x] Configuración Docker (backend + Postgres)
 - [x] Editar un viaje ya creado (fechas, personas, presupuesto, estado), con recálculo del presupuesto
 - [x] Autocompletado de lugares reales al agregar una actividad
-- [ ] **Optimización de recorridos (heurísticas tipo TSP)** — no implementada: hoy el orden de las actividades dentro de cada día lo decide la IA al generar el itinerario, y el usuario lo puede reordenar a mano
+- [x] Optimización de recorridos por día (heurística tipo TSP: nearest-neighbor + 2-opt), con los horarios corridos a la nueva secuencia
 
 ## Futuras Mejoras
 
