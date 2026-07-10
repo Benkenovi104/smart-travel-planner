@@ -1,36 +1,112 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Smart Travel Planner — Frontend
 
-## Getting Started
+Aplicación web del [Smart Travel Planner](../README.md), construida con Next.js 16 (App Router) y React 19. Consume el [backend NestJS](../backend/README.md) a través de un **proxy BFF** propio, de modo que el JWT nunca queda accesible al JavaScript del navegador.
 
-First, run the development server:
+Cubre el flujo completo: registro e inicio de sesión, perfil de viajero, creación de viajes, generación del itinerario con IA, edición manual con drag & drop, mapa, presupuesto, y selección de vuelo y alojamiento.
+
+## Stack
+
+| Capa | Tecnología |
+|---|---|
+| Framework | Next.js 16 (App Router, Turbopack) / React 19 / TypeScript |
+| Estilos | Tailwind CSS 4 + shadcn/ui |
+| Estado del servidor | TanStack Query v5 |
+| Formularios | React Hook Form + Zod |
+| Mapas | Leaflet + OpenStreetMap (sin API key) |
+| Drag & drop | `@dnd-kit` |
+| Notificaciones | `sonner` |
+| Íconos | `lucide-react` |
+
+> ⚠️ **Next.js 16 tiene breaking changes.** `middleware.ts` pasó a llamarse `proxy.ts`; `cookies()` y `headers()` son asíncronas; `params` y `searchParams` son `Promise`; la prop de reintento de `error.tsx` es `unstable_retry`, no `reset`; y `next lint` fue eliminado (se usa `eslint` directo). Ante la duda, leé `node_modules/next/dist/docs/` antes de escribir código.
+
+## Instalación
 
 ```bash
+npm install
+cp .env.example .env.local   # o crealo a mano, ver abajo
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Arranca en `http://localhost:3001`. Necesita el backend corriendo en `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Variables de entorno
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Variable | Requerida | Descripción |
+|---|---|---|
+| `BACKEND_URL` | Sí | URL base del backend, incluyendo el prefijo `/api` (ej. `http://localhost:3000/api`). Solo se lee del lado del servidor. |
+| `AUTH_COOKIE_NAME` | No | Nombre de la cookie de sesión (default `stp_token`). |
 
-## Learn More
+No hay variables `NEXT_PUBLIC_*`: el navegador nunca habla directo con el backend.
 
-To learn more about Next.js, take a look at the following resources:
+## Scripts
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Comando | Descripción |
+|---|---|
+| `npm run dev` | Servidor de desarrollo en el puerto 3001. |
+| `npm run build` | Build de producción. |
+| `npm run start` | Sirve el build en el puerto 3001. |
+| `npm run lint` | ESLint (flat config). |
+| `npx tsc --noEmit` | Chequeo de tipos. |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Arquitectura: el BFF proxy
 
-## Deploy on Vercel
+El JavaScript del navegador no puede leer una cookie `httpOnly`, así que no puede armar el header `Authorization: Bearer` por su cuenta. La solución es que Next actúe de intermediario:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```
+Navegador (TanStack Query)  ──fetch same-origin──►  Route Handlers de Next (/api/*)
+       (la cookie httpOnly viaja sola)                        │
+                                                              │ lee la cookie y agrega
+                                                              │ Authorization: Bearer
+                                                              ▼
+                                                     Backend NestJS (:3000/api)
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Login y registro**: un Route Handler dedicado recibe las credenciales, llama al backend y guarda el `access_token` en una cookie `httpOnly`. El token nunca toca el JS del cliente.
+- **Todo lo demás**: TanStack Query pega a `/api/...` (mismo origen) y el catch-all `app/api/[...path]/route.ts` reenvía al backend con el Bearer de la cookie.
+- **Logout**: un Route Handler borra la cookie. El backend es stateless y no revoca JWTs.
+- **`proxy.ts`** (el ex `middleware.ts`): guard optimista de rutas. Sin cookie en una ruta privada, redirige a `/login`; con cookie en una ruta de auth, al dashboard. Es UX, no seguridad — la validación real la hace el backend en cada request.
+
+## Estructura
+
+```
+frontend/
+├── app/
+│   ├── (auth)/              # grupo público: login, register, forgot/reset password
+│   ├── (app)/               # grupo privado: dashboard, viajes, perfil
+│   ├── api/                 # BFF: route handlers de auth + proxy genérico
+│   ├── error.tsx            # boundary de errores de ruta
+│   ├── global-error.tsx     # boundary del root layout
+│   ├── not-found.tsx
+│   └── providers.tsx        # TanStack Query + manejo global de 401
+├── components/
+│   ├── ui/                  # shadcn
+│   ├── itinerario/          # vista, edición y drag & drop
+│   ├── mapa/                # Leaflet (dynamic, ssr:false)
+│   ├── presupuesto/
+│   ├── reservas/            # vuelos y alojamiento
+│   ├── perfil/
+│   └── viajes/
+├── lib/
+│   ├── api/                 # cliente tipado por recurso + normalización
+│   ├── query/               # query keys y hooks de TanStack Query
+│   └── types/               # `api.ts` (shape crudo) y `models.ts` (dominio)
+└── proxy.ts
+```
+
+## Decisiones que conviene conocer
+
+**Normalización de tipos.** El backend serializa con naming mixto (Prisma devuelve el nombre del campo del modelo, no el de la columna) y los `Decimal` viajan como `string`. Por eso `lib/types/api.ts` describe el shape crudo y `lib/api/normalize.ts` lo convierte a los modelos limpios de `lib/types/models.ts`. Los componentes solo ven modelos normalizados.
+
+**Invalidación cruzada.** El backend recalcula el presupuesto cuando se toca el itinerario o se elige un vuelo/alojamiento. Los hooks invalidan `presupuesto` en esas mutaciones.
+
+**Manejo global de 401.** Un 401 en una *query* significa sesión vencida: `QueryCache.onError` limpia la caché y manda a `/login`. Va **solo en las queries, nunca en las mutaciones**, porque el backend usa 401 también para "la contraseña actual es incorrecta" (al cambiar la contraseña o borrar la cuenta) y ahí expulsar al usuario sería un bug.
+
+**Recuperación de contraseña.** `/forgot-password` muestra siempre la misma pantalla exista o no el email: el backend responde genérico a propósito para no revelar qué cuentas están registradas.
+
+**Mapa.** Leaflet se carga con `dynamic(..., { ssr: false })` porque no puede renderizar en el servidor. Las actividades sin coordenadas se pueden ubicar a posteriori con Nominatim desde el propio mapa, y el alojamiento elegido aparece como un pin fijo visible en todos los días.
+
+## Estado
+
+Fases 0 a 5 completas: auth, dashboard, wizard de creación, itinerario generado y editable, mapa, presupuesto, vuelos y alojamiento, gestión de cuenta, errores globales y responsive.
+
+Lo que falta está documentado en `PLAN_FRONTEND.md` (documento vivo, no versionado): editar un viaje, autocompletado de lugares reales al agregar actividades, y cambiar el estado del viaje.

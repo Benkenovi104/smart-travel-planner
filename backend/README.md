@@ -54,7 +54,7 @@ Esto arranca dos servicios: `db` (Postgres 16) y `backend`. En el arranque, el b
 | `GEMINI_API_KEY` | Sí | API key de Google Gemini, usada para generar itinerarios. |
 | `GOOGLE_PLACES_API_KEY` | Sí | API key con "Places API (New)" habilitada en Google Cloud (requiere billing habilitado). Usada para buscar lugares turísticos reales. |
 | `RAPIDAPI_KEY` | Sí | API key de RapidAPI, con suscripción (free tier) a "Sky Scrapper" (vuelos) y "Booking COM" (`booking-com15`, alojamiento). |
-| `RAPIDAPI_MOCK` | No | `"true"` para usar datos fixture en vuelos/alojamiento sin pegarle a RapidAPI (no gasta cuota; útil en dev/demos). Default `"false"`. |
+| `RAPIDAPI_MOCK` | No | `"true"` para usar datos fixture en vuelos/alojamiento sin pegarle a RapidAPI (no gasta cuota; útil en dev/demos). Los hoteles fixture están **por ciudad** (hoy Mendoza y Córdoba, con coordenadas aproximadas); una ciudad sin fixture cae en Mendoza y avisa por log. Default `"false"`. |
 | `SMTP_HOST` / `SMTP_PORT` | No | Servidor SMTP para el mail de recuperación de contraseña (Gmail: `smtp.gmail.com` / `465`). |
 | `SMTP_USER` / `SMTP_PASS` | No* | Cuenta remitente y su **App Password** (Gmail requiere 2FA + App Password de 16 chars). *Requeridas para que `forgot-password` funcione; la app arranca sin ellas. |
 | `MAIL_FROM` | No | Dirección "De:" del mail (con Gmail, igual a `SMTP_USER`). |
@@ -91,13 +91,18 @@ Con el servidor corriendo:
 | `auth` | `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/change-password`, `POST /api/auth/forgot-password`, `POST /api/auth/reset-password` | Registro/login con JWT (bcrypt, 7 días). Cambio de contraseña (autenticado) y recuperación por email (token SHA-256 con vencimiento de 1h). Rate limit de 5 intentos/minuto. |
 | `usuarios` | `/api/usuarios/*` | Perfil propio, perfil de viajero (ritmo, presupuesto, tipo), catálogo e intereses del usuario, y **borrado de cuenta** (`DELETE /api/usuarios/me`, con confirmación de contraseña y cascade completo). |
 | `viajes` | `/api/viajes/*` | CRUD de viajes, scopeado por usuario, con intereses específicos por viaje. |
-| `itinerarios` | `/api/viajes/:idViaje/itinerario/*` | Generación de itinerario con IA (Gemini), consulta, y edición manual: agregar/editar/eliminar/mover actividades entre días, con historial de cambios (`GET .../cambios`). |
-| `presupuestos` | `GET /api/viajes/:idViaje/presupuesto` | Desglose de presupuesto por categoría + detalle de gastos, recalculado automáticamente en cada mutación del itinerario. |
-| `lugares` | `GET /api/lugares/buscar` | Búsqueda de lugares turísticos reales (Google Places), cacheados en la tabla `lugares` y reutilizados como contexto al generar itinerarios. |
-| `vuelos` | `/api/viajes/:idViaje/vuelos/*` | Búsqueda de opciones de vuelo reales (Sky Scrapper, ida y vuelta combinadas), guardadas en `opciones_vuelo` ordenadas por precio. |
-| `alojamiento` | `/api/viajes/:idViaje/alojamiento/*` | Búsqueda de opciones de alojamiento reales (Booking.com), guardadas en `opciones_alojamiento` ordenadas por precio por noche. |
+| `itinerarios` | `/api/viajes/:idViaje/itinerario/*` | Generación de itinerario con IA (Gemini), consulta, y edición manual: agregar/editar/eliminar/mover actividades entre días, con historial de cambios (`GET .../cambios`). `POST .../geocodificar` ubica por lotes las actividades sin coordenadas. |
+| `presupuestos` | `GET /api/viajes/:idViaje/presupuesto` | Desglose por categoría + detalle de gastos, recalculado automáticamente al mutar el itinerario o al elegir vuelo/alojamiento. |
+| `lugares` | `GET /api/lugares/buscar` | Búsqueda de lugares turísticos reales (Google Places), cacheados en la tabla `lugares` y reutilizados como contexto al generar itinerarios. También expone el geocoding con Nominatim/OSM (sin API key). |
+| `vuelos` | `/api/viajes/:idViaje/vuelos/*` | Busca opciones reales (Sky Scrapper, ida y vuelta combinadas) y las guarda en `opciones_vuelo` ordenadas por precio. `PATCH .../:idVuelo/seleccionar` elige una (exclusiva por viaje) y recalcula el presupuesto. |
+| `alojamiento` | `/api/viajes/:idViaje/alojamiento/*` | Ídem con Booking.com, ordenadas por precio por noche. `PATCH .../:idAlojamiento/seleccionar` elige una y suma `precio_por_noche × noches` al presupuesto. |
 
-Todos los endpoints salvo `auth` y `health` requieren `Authorization: Bearer <token>` (`JwtAuthGuard`).
+Todos los endpoints salvo `auth` y `health` requieren `Authorization: Bearer <token>` (`JwtAuthGuard`). La estrategia JWT **verifica contra la base que el usuario siga existiendo**: el token de una cuenta borrada da 401 de inmediato, sin esperar a que venza.
+
+### Dos reglas de dominio que conviene conocer
+
+- **El alojamiento no es una actividad del itinerario**, sino un costo del viaje. `alojamiento` no es un `tipo_actividad` válido (ver `itinerarios/dto/tipos-actividad.ts`); el usuario elige un hotel por viaje y de ahí sale `monto_alojamiento`. Se le pide a Gemini que no lo genere **y además se filtra al persistir**, porque el modelo ignora la instrucción con frecuencia.
+- **Los precios ya vienen calculados para todo el grupo.** `OpcionVuelo.precio` es el total ida+vuelta (la búsqueda consulta la API con `cantidadPersonas` adultos) y `precio_por_noche` también está prorrateado. **No hay que multiplicar por la cantidad de personas.**
 
 > Nota: los datos de vuelos/alojamiento vienen de mirrors no oficiales de Skyscanner y Booking.com en RapidAPI — son informativos/de simulación, no hay integración de reserva real. Para desarrollar sin gastar cuota, ver `RAPIDAPI_MOCK`.
 
@@ -108,12 +113,17 @@ npm test           # unitarios (~3s)
 npm run test:e2e   # end-to-end (~90s, hace 1 llamada real a Gemini)
 ```
 
-- **Unitarios** (8 suites): cada service aislado, mockeando Prisma y las APIs externas (Gemini/Google/RapidAPI/Mail) por inyección de dependencias; bcrypt/crypto corren reales. Cubren auth (register/login/cambio/forgot/reset), borrado de cuenta con cascade, IDOR en viajes, matemática del presupuesto, ranking de vuelos/alojamiento y los guards de itinerarios.
+- **Unitarios** (9 suites, 49 tests): cada service aislado, mockeando Prisma y las APIs externas (Gemini/Google/RapidAPI/Mail) por inyección de dependencias; bcrypt/crypto corren reales. Cubren auth (register/login/cambio/forgot/reset), la estrategia JWT (rechaza tokens de cuentas borradas), borrado de cuenta con cascade, IDOR en viajes, matemática del presupuesto (incluidos vuelo y alojamiento elegidos), ranking y selección de vuelos/alojamiento, y los guards de itinerarios.
 - **E2E** (`test/main-flow.e2e-spec.ts`): bootstrapea la `AppModule` real y recorre el flujo completo **contra la base configurada en `.env`** con **Gemini real** y `RAPIDAPI_MOCK=true`: registro → login → crear viaje → generar itinerario con IA → presupuesto → vuelos/alojamiento → IDOR 403. Crea y borra sus propios usuarios (se autolimpia).
 
 ## Base de datos
 
-El schema de Prisma (`prisma/schema.prisma`) modela usuarios, perfil de viajero, intereses, viajes, itinerarios, días, lugares, actividades, presupuesto, gastos y opciones de vuelo/alojamiento. Se sincroniza con `npx prisma db push` (**flujo schema-first, sin carpeta de migraciones**). El cliente generado va a `generated/prisma` (gitignoreado, se regenera con `npx prisma generate`).
+El schema de Prisma (`prisma/schema.prisma`) modela usuarios, perfil de viajero, intereses, viajes, itinerarios, días, lugares, actividades, presupuesto, gastos y opciones de vuelo/alojamiento. El cliente generado va a `generated/prisma` (gitignoreado, se regenera con `npx prisma generate`).
+
+Conviven dos flujos, según el entorno:
+
+- **Local y Docker**: `npx prisma db push` sincroniza el schema directamente contra la base. Es lo que corre el `docker-compose` al arrancar.
+- **Supabase**: la base está versionada con las migraciones de `prisma/migrations/`, que se aplican con `npx prisma migrate deploy`. Nunca uses `migrate dev` contra Supabase: ante una divergencia ofrece resetear la base.
 
 > Nota: el schema usa `onDelete: NoAction` en todas las relaciones — los borrados en cascada (viaje → itinerario → días → actividades, etc., y usuario → viajes/perfil/intereses) se manejan explícitamente en los services dentro de transacciones, no a nivel de base de datos.
 
