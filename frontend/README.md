@@ -111,6 +111,6 @@ frontend/
 
 ## Estado
 
-Fases 0 a 6 completas: auth, dashboard, wizard de creación, edición del viaje y de su estado, itinerario generado y editable, autocompletado de lugares reales, mapa, presupuesto, vuelos y alojamiento, gestión de cuenta, errores globales y responsive.
+Fases 0 a 7 completas: auth, dashboard, wizard de creación, edición del viaje y de su estado, itinerario generado y editable, autocompletado de lugares reales, optimización de recorrido por día, mapa, presupuesto, vuelos y alojamiento, gestión de cuenta, errores globales y responsive.
 
-Las mejoras pendientes están documentadas en `PLAN_FRONTEND.md` (documento vivo, no versionado).
+El backlog de mejoras futuras (CI, deploy, tests de frontend, etc.) vive en `EXTRAS.md` en la raíz del repo (documento vivo, no versionado).

@@ -16,6 +16,4 @@ test
 Dockerfile
 .dockerignore
 docker-compose.yml
-ESTADO_BACKEND.md
-PENDIENTES_BACKEND.md
 README.md

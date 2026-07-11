@@ -1,5 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import {
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { describe, beforeEach, it, expect, jest } from '@jest/globals';
 import { ItinerariosService } from './itinerarios.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -65,6 +70,94 @@ describe('ItinerariosService', () => {
     });
   });
 
+  describe('agregarActividad (horarios)', () => {
+    const t = (hhmm: string) => new Date(`1970-01-01T${hhmm}:00Z`);
+
+    // Día con dos actividades: 09:00–10:00 (orden 1) y 15:00–16:00 (orden 2).
+    function mockTx(existentes: any[]) {
+      const updateMany = jest.fn<any>();
+      const create = jest.fn<any>().mockResolvedValue({ lugares: { nombre: 'X' } });
+      const tx = {
+        diaItinerario: {
+          findUnique: jest.fn<any>().mockResolvedValue({
+            id_dia_itinerario: 10,
+            id_itinerario: 1,
+            numeroDia: 1,
+          }),
+        },
+        actividadItinerario: {
+          findMany: jest.fn<any>().mockResolvedValue(existentes),
+          updateMany,
+          create,
+        },
+        lugar: { findUnique: jest.fn<any>().mockResolvedValue({ id_lugar: 5 }) },
+        cambioItinerario: { create: jest.fn<any>() },
+      };
+      prisma.viaje.findUnique.mockResolvedValue({ id_usuario: 1 });
+      prisma.itinerario.findUnique.mockResolvedValue({ id_itinerario: 1 });
+      prisma.$transaction = jest.fn<any>(async (cb: any) => cb(tx));
+      return { tx, updateMany, create };
+    }
+
+    const dia = () => [
+      { id_actividad: 1, orden: 1, hora_inicio_estimada: t('09:00'), hora_fin_estimada: t('10:00') },
+      { id_actividad: 2, orden: 2, hora_inicio_estimada: t('15:00'), hora_fin_estimada: t('16:00') },
+    ];
+
+    it('inserta en la posición cronológica según la hora', async () => {
+      const { updateMany, create } = mockTx(dia());
+      // 12:00 va entre las 10:00 y las 15:00 -> antes de la actividad orden 2.
+      await service.agregarActividad(1, 5, 10, {
+        id_lugar: 5,
+        hora_inicio: '12:00',
+        hora_fin: '13:00',
+      });
+      expect(updateMany).toHaveBeenCalledWith({
+        where: { id_dia_itinerario: 10, orden: { gte: 2 } },
+        data: { orden: { increment: 1 } },
+      });
+      expect(create.mock.calls[0][0].data.orden).toBe(2);
+    });
+
+    it('sin hora va al final', async () => {
+      const { create } = mockTx(dia());
+      await service.agregarActividad(1, 5, 10, { id_lugar: 5 });
+      expect(create.mock.calls[0][0].data.orden).toBe(3);
+    });
+
+    it('rechaza (409) si el horario se pisa con otra actividad', async () => {
+      mockTx(dia());
+      // 09:30 cae dentro de la actividad 09:00–10:00.
+      await expect(
+        service.agregarActividad(1, 5, 10, {
+          id_lugar: 5,
+          hora_inicio: '09:30',
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('permite una actividad pegada (11:00 justo después de 10:00)', async () => {
+      const { create } = mockTx(dia());
+      await service.agregarActividad(1, 5, 10, {
+        id_lugar: 5,
+        hora_inicio: '10:00',
+        hora_fin: '11:00',
+      });
+      expect(create).toHaveBeenCalled();
+    });
+
+    it('rechaza si la hora de fin no es posterior a la de inicio', async () => {
+      mockTx(dia());
+      await expect(
+        service.agregarActividad(1, 5, 10, {
+          id_lugar: 5,
+          hora_inicio: '12:00',
+          hora_fin: '11:00',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
+
   describe('optimizarDia', () => {
     // 4 paradas en línea (lng fijo, lat 0/3/1/2) en orden zigzag A,B,C,D.
     // El recorrido más corto desde A es A -> C -> D -> B (lat 0,1,2,3).
@@ -116,17 +209,68 @@ describe('ItinerariosService', () => {
       ]);
     });
 
-    it('no escribe nada si el orden ya era óptimo', async () => {
-      // A, C, D, B ya es el recorrido óptimo.
+    it('deja los horarios en orden cronológico aunque entren desordenados', async () => {
+      // Mismas 4 paradas, pero con las horas puestas fuera de orden por posición
+      // (como si se hubieran arrastrado a mano antes de optimizar).
+      const acts = actividadesZigzag().map((a, i) => ({
+        ...a,
+        hora_inicio_estimada: [hora(12), hora(9), hora(14), hora(10)][i],
+        hora_fin_estimada: null,
+      }));
+      const { updates } = mockTx(acts);
+      await service.optimizarDia(1, 5, 20);
+
+      // Orden espacial A,C,D,B; las horas se reparten cronológicas: 9,10,12,14.
+      expect(updates.map((u) => u.id)).toEqual([1, 3, 4, 2]);
+      expect(updates.map((u) => u.hora_inicio_estimada.getUTCHours())).toEqual([
+        9, 10, 12, 14,
+      ]);
+    });
+
+    it('no escribe nada si el orden ya era óptimo y las horas ya eran cronológicas', async () => {
+      // A, C, D, B ya es el recorrido óptimo, con horas 9,10,11,12 en ese orden.
       const acts = actividadesZigzag();
       const yaOptimo = [acts[0], acts[2], acts[3], acts[1]].map((a, i) => ({
         ...a,
         orden: i + 1,
+        hora_inicio_estimada: hora(9 + i),
+        hora_fin_estimada: hora(10 + i),
       }));
       const { updates } = mockTx(yaOptimo);
       const res = await service.optimizarDia(1, 5, 20);
       expect(res.optimizada).toBe(false);
       expect(updates).toEqual([]);
+    });
+
+    it('agrupa por zona y mete el traslado en el cruce (multi-ciudad)', async () => {
+      // Caso real: Córdoba (3 destinos) + Villa Carlos Paz (2 destinos) + 2
+      // traslados geocodificados al centro de Córdoba. Orden original con las
+      // dos ciudades interleavadas por los traslados al principio.
+      const cba = (lng: number) => ({ latitud: -31.42, longitud: lng });
+      const cp = (lng: number) => ({ latitud: -31.43, longitud: lng });
+      const acts = [
+        { id_actividad: 6, orden: 1, tipo_actividad: 'transporte', hora_inicio_estimada: hora(8), hora_fin_estimada: hora(9), lugares: cba(-64.1833) },
+        { id_actividad: 7, orden: 2, tipo_actividad: 'transporte', hora_inicio_estimada: hora(9), hora_fin_estimada: hora(10), lugares: cba(-64.1833) },
+        { id_actividad: 1, orden: 3, tipo_actividad: 'visita', hora_inicio_estimada: hora(13), hora_fin_estimada: hora(14), lugares: cba(-64.1835) },
+        { id_actividad: 2, orden: 4, tipo_actividad: 'visita', hora_inicio_estimada: hora(14), hora_fin_estimada: hora(15), lugares: cba(-64.1807) },
+        { id_actividad: 3, orden: 5, tipo_actividad: 'comida', hora_inicio_estimada: hora(15), hora_fin_estimada: hora(16), lugares: cba(-64.1927) },
+        { id_actividad: 4, orden: 6, tipo_actividad: 'entretenimiento', hora_inicio_estimada: hora(17), hora_fin_estimada: hora(18), lugares: cp(-64.4904) },
+        { id_actividad: 5, orden: 7, tipo_actividad: 'comida', hora_inicio_estimada: hora(20), hora_fin_estimada: hora(21), lugares: cp(-64.4988) },
+      ];
+      const { updates } = mockTx(acts);
+      await service.optimizarDia(1, 5, 20);
+
+      const ids = updates.map((u) => u.id);
+      // Los 3 de Córdoba contiguos, luego un traslado, luego los 2 de Carlos Paz,
+      // luego el otro traslado.
+      expect(ids.slice(0, 3).sort()).toEqual([1, 2, 3]);
+      expect([6, 7]).toContain(ids[3]);
+      expect(ids.slice(4, 6).sort()).toEqual([4, 5]);
+      expect([6, 7]).toContain(ids[6]);
+      expect(ids[3]).not.toBe(ids[6]);
+      // Horarios cronológicos.
+      const hs = updates.map((u) => u.hora_inicio_estimada.getUTCHours());
+      expect(hs.every((h, i) => i === 0 || hs[i - 1] <= h)).toBe(true);
     });
 
     it('lanza BadRequest si hay menos de 3 actividades con ubicación', async () => {
