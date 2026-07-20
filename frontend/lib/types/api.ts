@@ -22,8 +22,23 @@ export interface AuthResponse {
 }
 
 // ---------- Usuario / perfil / intereses ----------
-export type RitmoPreferido = 'relajado' | 'moderado' | 'intenso';
-export type PresupuestoPreferido = 'económico' | 'moderado' | 'premium' | 'lujo';
+export type RitmoPreferido =
+  | 'relajado'
+  | 'moderado'
+  | 'intenso'
+  | 'MARATONICO'
+  | 'EQUILIBRADO'
+  | 'RELAX';
+
+export type PresupuestoPreferido =
+  | 'económico'
+  | 'moderado'
+  | 'premium'
+  | 'lujo'
+  | 'ECONOMICO'
+  | 'CONFORT'
+  | 'PREMIUM';
+
 export type TipoViajero = 'solo' | 'pareja' | 'familia' | 'grupo' | 'negocios';
 
 export interface Interes {

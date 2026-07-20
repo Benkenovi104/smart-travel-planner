@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { Loader2, Trash2 } from 'lucide-react';
+import { Loader2, Trash2, KeyRound, ShieldAlert } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -75,7 +75,7 @@ export function CambiarPassword() {
       },
       {
         onSuccess: () => {
-          toast.success('Contraseña actualizada');
+          toast.success('Contraseña actualizada correctamente');
           form.reset();
         },
         onError: (e) =>
@@ -89,10 +89,13 @@ export function CambiarPassword() {
   }
 
   return (
-    <Card>
+    <Card className="bg-slate-900/80 border border-slate-800/80 backdrop-blur-xl rounded-3xl shadow-xl">
       <CardHeader>
-        <CardTitle>Contraseña</CardTitle>
-        <CardDescription>
+        <CardTitle className="text-xl font-bold text-white flex items-center gap-2">
+          <KeyRound className="w-5 h-5 text-sky-400" />
+          Seguridad y Contraseña
+        </CardTitle>
+        <CardDescription className="text-slate-400">
           Vas a seguir con la sesión iniciada en este dispositivo.
         </CardDescription>
       </CardHeader>
@@ -104,11 +107,12 @@ export function CambiarPassword() {
               name="password_actual"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Contraseña actual</FormLabel>
+                  <FormLabel className="text-slate-200">Contraseña actual</FormLabel>
                   <FormControl>
                     <Input
                       type="password"
                       autoComplete="current-password"
+                      className="bg-slate-950/60 border-slate-800 text-white focus:border-sky-500"
                       {...field}
                     />
                   </FormControl>
@@ -122,11 +126,12 @@ export function CambiarPassword() {
                 name="password_nueva"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Contraseña nueva</FormLabel>
+                    <FormLabel className="text-slate-200">Contraseña nueva</FormLabel>
                     <FormControl>
                       <Input
                         type="password"
                         autoComplete="new-password"
+                        className="bg-slate-950/60 border-slate-800 text-white focus:border-sky-500"
                         {...field}
                       />
                     </FormControl>
@@ -139,11 +144,12 @@ export function CambiarPassword() {
                 name="confirmacion"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Repetir contraseña</FormLabel>
+                    <FormLabel className="text-slate-200">Repetir contraseña</FormLabel>
                     <FormControl>
                       <Input
                         type="password"
                         autoComplete="new-password"
+                        className="bg-slate-950/60 border-slate-800 text-white focus:border-sky-500"
                         {...field}
                       />
                     </FormControl>
@@ -152,10 +158,14 @@ export function CambiarPassword() {
                 )}
               />
             </div>
-            <div className="flex justify-end">
-              <Button type="submit" disabled={cambiar.isPending}>
-                {cambiar.isPending && <Loader2 className="animate-spin" />}
-                Cambiar contraseña
+            <div className="flex justify-end pt-2">
+              <Button
+                type="submit"
+                className="bg-sky-600 hover:bg-sky-700 text-white rounded-full px-6"
+                disabled={cambiar.isPending}
+              >
+                {cambiar.isPending && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                Actualizar Contraseña
               </Button>
             </div>
           </CardContent>
@@ -198,12 +208,14 @@ export function EliminarCuenta() {
   }
 
   return (
-    <Card className="border-destructive/40">
+    <Card className="bg-slate-900/80 border border-red-500/30 backdrop-blur-xl rounded-3xl shadow-xl">
       <CardHeader>
-        <CardTitle className="text-destructive">Eliminar cuenta</CardTitle>
-        <CardDescription>
-          Se borran tu perfil y todos tus viajes con sus itinerarios. No se puede
-          deshacer.
+        <CardTitle className="text-xl font-bold text-red-400 flex items-center gap-2">
+          <ShieldAlert className="w-5 h-5 text-red-400" />
+          Zona de Peligro
+        </CardTitle>
+        <CardDescription className="text-slate-400">
+          Se borrará tu cuenta, tu perfil y todos tus viajes guardados de forma permanente.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -215,16 +227,16 @@ export function EliminarCuenta() {
           }}
         >
           <DialogTrigger asChild>
-            <Button variant="destructive">
-              <Trash2 className="size-4" />
-              Eliminar mi cuenta
+            <Button variant="destructive" className="rounded-full px-6 gap-2 bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white border border-red-500/30">
+              <Trash2 className="w-4 h-4" />
+              Eliminar mi cuenta definitivamente
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="bg-slate-900 border-slate-800 text-white">
             <DialogHeader>
-              <DialogTitle>¿Eliminar tu cuenta?</DialogTitle>
-              <DialogDescription>
-                Esta acción es permanente. Confirmá con tu contraseña.
+              <DialogTitle className="text-white">¿Eliminar tu cuenta?</DialogTitle>
+              <DialogDescription className="text-slate-400">
+                Esta acción es permanente. Para confirmar, ingresá tu contraseña actual.
               </DialogDescription>
             </DialogHeader>
             <Form {...form}>
@@ -238,16 +250,17 @@ export function EliminarCuenta() {
                   name="password"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Contraseña</FormLabel>
+                      <FormLabel className="text-slate-200">Contraseña</FormLabel>
                       <FormControl>
                         <Input
                           type="password"
                           autoComplete="current-password"
+                          className="bg-slate-950 border-slate-800 text-white"
                           {...field}
                         />
                       </FormControl>
-                      <FormDescription>
-                        Te pedimos la contraseña para asegurarnos de que sos vos.
+                      <FormDescription className="text-slate-400 text-xs">
+                        Necesitamos tu contraseña para verificar tu identidad.
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -257,15 +270,18 @@ export function EliminarCuenta() {
             </Form>
             <DialogFooter>
               <DialogClose asChild>
-                <Button variant="outline">Cancelar</Button>
+                <Button variant="outline" className="border-slate-800 text-slate-300 hover:bg-slate-800">
+                  Cancelar
+                </Button>
               </DialogClose>
               <Button
                 type="submit"
                 form="form-eliminar-cuenta"
                 variant="destructive"
+                className="bg-red-600 hover:bg-red-700 text-white"
                 disabled={eliminar.isPending}
               >
-                {eliminar.isPending && <Loader2 className="animate-spin" />}
+                {eliminar.isPending && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
                 Eliminar definitivamente
               </Button>
             </DialogFooter>

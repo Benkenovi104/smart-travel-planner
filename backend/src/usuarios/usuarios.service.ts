@@ -10,6 +10,27 @@ import { ViajesService } from '../viajes/viajes.service.js';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto.js';
 import { UpsertPerfilDto } from './dto/upsert-perfil.dto.js';
 import { AddInteresDto } from './dto/add-interes.dto.js';
+import { RitmoViaje, NivelPresupuesto } from '../../generated/prisma/enums.js';
+
+function mapRitmoVal(ritmo?: string): RitmoViaje | undefined {
+  if (!ritmo) return undefined;
+  const val = ritmo.toUpperCase();
+  if (val === 'RELAJADO' || val === 'RELAX') return RitmoViaje.RELAX;
+  if (val === 'MODERADO' || val === 'EQUILIBRADO')
+    return RitmoViaje.EQUILIBRADO;
+  if (val === 'INTENSO' || val === 'MARATONICO') return RitmoViaje.MARATONICO;
+  return undefined;
+}
+
+function mapPresupuestoVal(presupuesto?: string): NivelPresupuesto | undefined {
+  if (!presupuesto) return undefined;
+  const val = presupuesto.toUpperCase();
+  if (val === 'ECONÓMICO' || val === 'ECONOMIC' || val === 'ECONOMICO')
+    return NivelPresupuesto.ECONOMICO;
+  if (val === 'MODERADO' || val === 'CONFORT') return NivelPresupuesto.CONFORT;
+  if (val === 'PREMIUM' || val === 'LUJO') return NivelPresupuesto.PREMIUM;
+  return undefined;
+}
 
 const USUARIO_SELECT = {
   id_usuario: true,
@@ -54,20 +75,21 @@ export class UsuariosService {
   }
 
   async upsertPerfil(id_usuario: number, dto: UpsertPerfilDto) {
+    const ritmo = mapRitmoVal(dto.ritmo_preferido);
+    const presupuesto = mapPresupuestoVal(dto.presupuesto_preferido);
+
     return this.prisma.perfilViajero.upsert({
       where: { id_usuario },
       create: {
         id_usuario,
-        ritmoPreferido: dto.ritmo_preferido,
-        presupuesto_preferido: dto.presupuesto_preferido,
+        ...(ritmo && { ritmoPreferido: ritmo }),
+        ...(presupuesto && { presupuesto_preferido: presupuesto }),
         tipoViajero: dto.tipo_viajero,
       },
       update: {
-        ...(dto.ritmo_preferido !== undefined && {
-          ritmoPreferido: dto.ritmo_preferido,
-        }),
-        ...(dto.presupuesto_preferido !== undefined && {
-          presupuesto_preferido: dto.presupuesto_preferido,
+        ...(ritmo !== undefined && { ritmoPreferido: ritmo }),
+        ...(presupuesto !== undefined && {
+          presupuesto_preferido: presupuesto,
         }),
         ...(dto.tipo_viajero !== undefined && {
           tipoViajero: dto.tipo_viajero,

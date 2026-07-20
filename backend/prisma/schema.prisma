@@ -23,13 +23,45 @@ model Usuario {
   @@map("usuarios")
 }
 
+enum RitmoViaje {
+  MARATONICO
+  EQUILIBRADO
+  RELAX
+}
+
+enum NivelPresupuesto {
+  ECONOMICO
+  CONFORT
+  PREMIUM
+}
+
+enum PreferenciaDietaria {
+  NINGUNA
+  VEGETARIANA
+  VEGANA
+  CELIACA
+  KOSHER
+  HALAL
+}
+
+enum NecesidadMovilidad {
+  NINGUNA
+  SILLA_DE_RUEDAS
+  MINIMO_RECORRIDO
+}
+
 model PerfilViajero {
-  id_perfil             Int     @id @default(autoincrement())
-  id_usuario            Int     @unique
-  ritmoPreferido        String? @map("ritmo_preferido") @db.VarChar
-  presupuesto_preferido String? @db.VarChar
-  tipoViajero           String? @map("tipo_viajero") @db.VarChar
-  usuarios              Usuario @relation(fields: [id_usuario], references: [id_usuario], onDelete: NoAction, onUpdate: NoAction)
+  id_perfil             Int                   @id @default(autoincrement())
+  id_usuario            Int                   @unique
+  ritmoPreferido        RitmoViaje            @default(EQUILIBRADO) @map("ritmo_preferido")
+  presupuesto_preferido NivelPresupuesto      @default(CONFORT) @map("presupuesto_preferido")
+  tipoViajero           String?               @map("tipo_viajero") @db.VarChar
+  dietas                PreferenciaDietaria[] @default([NINGUNA])
+  movilidad             NecesidadMovilidad[]  @default([NINGUNA])
+  completado            Boolean               @default(false)
+  created_at            DateTime              @default(now()) @map("created_at") @db.Timestamp(6)
+  updated_at            DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  usuarios              Usuario               @relation(fields: [id_usuario], references: [id_usuario], onDelete: Cascade, onUpdate: NoAction)
 
   @@map("perfil_viajero")
 }

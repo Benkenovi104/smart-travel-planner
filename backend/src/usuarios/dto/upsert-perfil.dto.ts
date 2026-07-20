@@ -1,26 +1,19 @@
-import { IsString, IsOptional, MaxLength, IsIn } from 'class-validator';
+import { IsString, IsOptional } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
-const RITMOS = ['relajado', 'moderado', 'intenso'];
-const PRESUPUESTOS = ['económico', 'moderado', 'premium', 'lujo'];
-const TIPOS = ['solo', 'pareja', 'familia', 'grupo', 'negocios'];
-
 export class UpsertPerfilDto {
-  @ApiPropertyOptional({ example: 'moderado', enum: RITMOS })
+  @ApiPropertyOptional({ example: 'EQUILIBRADO' })
   @IsOptional()
   @IsString()
-  @IsIn(RITMOS)
   ritmo_preferido?: string;
 
-  @ApiPropertyOptional({ example: 'moderado', enum: PRESUPUESTOS })
+  @ApiPropertyOptional({ example: 'CONFORT' })
   @IsOptional()
   @IsString()
-  @IsIn(PRESUPUESTOS)
   presupuesto_preferido?: string;
 
-  @ApiPropertyOptional({ example: 'pareja', enum: TIPOS })
+  @ApiPropertyOptional({ example: 'pareja' })
   @IsOptional()
   @IsString()
-  @IsIn(TIPOS)
   tipo_viajero?: string;
 }

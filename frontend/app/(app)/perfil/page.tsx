@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { Loader2, Plus, X } from 'lucide-react';
+import { Loader2, Plus, X, User, Sparkles, Heart } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -49,13 +49,8 @@ import type {
   TipoViajero,
 } from '@/lib/types/models';
 
-const RITMOS: RitmoPreferido[] = ['relajado', 'moderado', 'intenso'];
-const PRESUPUESTOS: PresupuestoPreferido[] = [
-  'económico',
-  'moderado',
-  'premium',
-  'lujo',
-];
+const RITMOS = ['EQUILIBRADO', 'MARATONICO', 'RELAX'] as const;
+const PRESUPUESTOS = ['CONFORT', 'ECONOMICO', 'PREMIUM'] as const;
 const TIPOS: TipoViajero[] = ['solo', 'pareja', 'familia', 'grupo', 'negocios'];
 
 function errMsg(e: unknown, fallback: string) {
@@ -68,20 +63,30 @@ export default function PerfilPage() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <Skeleton className="h-8 w-40" />
-        <Skeleton className="h-48 w-full rounded-xl" />
-        <Skeleton className="h-48 w-full rounded-xl" />
+        <Skeleton className="h-28 w-full rounded-3xl bg-slate-900" />
+        <Skeleton className="h-48 w-full rounded-3xl bg-slate-900" />
+        <Skeleton className="h-48 w-full rounded-3xl bg-slate-900" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Perfil</h1>
-        <p className="text-muted-foreground text-sm">
-          Tus datos y preferencias de viaje.
-        </p>
+    <div className="space-y-8">
+      {/* Header Banner */}
+      <div className="relative overflow-hidden p-6 sm:p-8 rounded-3xl bg-linear-to-r from-slate-900 via-sky-950/40 to-slate-900 border border-slate-800/80 shadow-2xl">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-sky-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="relative z-10 space-y-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-400 text-xs font-semibold">
+            <User className="w-3.5 h-3.5" />
+            Ajustes de Cuenta
+          </div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-white">
+            Mi Perfil de Usuario
+          </h1>
+          <p className="text-slate-400 text-sm max-w-lg">
+            Administrá tus datos personales, preferencias de viaje e intereses turísticos.
+          </p>
+        </div>
       </div>
 
       <DatosPersonales
@@ -92,7 +97,6 @@ export default function PerfilPage() {
       <PerfilViajeroForm
         ritmo={me?.perfil?.ritmo ?? ''}
         presupuesto={me?.perfil?.presupuesto ?? ''}
-        tipo={me?.perfil?.tipoViajero ?? ''}
       />
       <InteresesSection />
       <CambiarPassword />
@@ -124,16 +128,19 @@ function DatosPersonales({
 
   function onSubmit(values: z.infer<typeof datosSchema>) {
     actualizar.mutate(values, {
-      onSuccess: () => toast.success('Datos actualizados'),
+      onSuccess: () => toast.success('Datos personales actualizados'),
       onError: (e) => toast.error(errMsg(e, 'No se pudieron guardar los datos')),
     });
   }
 
   return (
-    <Card>
+    <Card className="bg-slate-900/80 border border-slate-800/80 backdrop-blur-xl rounded-3xl shadow-xl">
       <CardHeader>
-        <CardTitle>Datos personales</CardTitle>
-        <CardDescription>{email}</CardDescription>
+        <CardTitle className="text-xl font-bold text-white flex items-center gap-2">
+          <User className="w-5 h-5 text-sky-400" />
+          Datos Personales
+        </CardTitle>
+        <CardDescription className="text-slate-400">{email}</CardDescription>
       </CardHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -144,9 +151,12 @@ function DatosPersonales({
                 name="nombre"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Nombre</FormLabel>
+                    <FormLabel className="text-slate-200">Nombre</FormLabel>
                     <FormControl>
-                      <Input {...field} />
+                      <Input
+                        className="bg-slate-950/60 border-slate-800 text-white focus:border-sky-500"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -157,22 +167,26 @@ function DatosPersonales({
                 name="apellido"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Apellido</FormLabel>
+                    <FormLabel className="text-slate-200">Apellido</FormLabel>
                     <FormControl>
-                      <Input {...field} />
+                      <Input
+                        className="bg-slate-950/60 border-slate-800 text-white focus:border-sky-500"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
             </div>
-            <div className="flex justify-end">
+            <div className="flex justify-end pt-2">
               <Button
                 type="submit"
+                className="bg-sky-600 hover:bg-sky-700 text-white rounded-full px-6"
                 disabled={actualizar.isPending || !form.formState.isDirty}
               >
-                {actualizar.isPending && <Loader2 className="animate-spin" />}
-                Guardar
+                {actualizar.isPending && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                Guardar Cambios
               </Button>
             </div>
           </CardContent>
@@ -186,29 +200,24 @@ function DatosPersonales({
 function PerfilViajeroForm({
   ritmo,
   presupuesto,
-  tipo,
 }: {
   ritmo: string;
   presupuesto: string;
-  tipo: string;
 }) {
   const guardar = useGuardarPerfil();
   const form = useForm<{
     ritmo_preferido: string;
     presupuesto_preferido: string;
-    tipo_viajero: string;
   }>({
     values: {
       ritmo_preferido: ritmo,
       presupuesto_preferido: presupuesto,
-      tipo_viajero: tipo,
     },
   });
 
   function onSubmit(values: {
     ritmo_preferido: string;
     presupuesto_preferido: string;
-    tipo_viajero: string;
   }) {
     guardar.mutate(
       {
@@ -219,9 +228,6 @@ function PerfilViajeroForm({
           presupuesto_preferido:
             values.presupuesto_preferido as PresupuestoPreferido,
         }),
-        ...(values.tipo_viajero && {
-          tipo_viajero: values.tipo_viajero as TipoViajero,
-        }),
       },
       {
         onSuccess: () => toast.success('Perfil de viajero actualizado'),
@@ -231,21 +237,24 @@ function PerfilViajeroForm({
   }
 
   return (
-    <Card>
+    <Card className="bg-slate-900/80 border border-slate-800/80 backdrop-blur-xl rounded-3xl shadow-xl">
       <CardHeader>
-        <CardTitle>Perfil de viajero</CardTitle>
-        <CardDescription>
-          Ayuda a la IA a personalizar tus itinerarios.
+        <CardTitle className="text-xl font-bold text-white flex items-center gap-2">
+          <Sparkles className="w-5 h-5 text-sky-400" />
+          Preferencias de Viaje
+        </CardTitle>
+        <CardDescription className="text-slate-400">
+          Guía a la Inteligencia Artificial al generar tus itinerarios.
         </CardDescription>
       </CardHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
           <CardContent className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2">
               <SelectField
                 control={form.control}
                 name="ritmo_preferido"
-                label="Ritmo"
+                label="Ritmo habitual"
                 options={RITMOS}
               />
               <SelectField
@@ -254,20 +263,15 @@ function PerfilViajeroForm({
                 label="Presupuesto habitual"
                 options={PRESUPUESTOS}
               />
-              <SelectField
-                control={form.control}
-                name="tipo_viajero"
-                label="Tipo de viajero"
-                options={TIPOS}
-              />
             </div>
-            <div className="flex justify-end">
+            <div className="flex justify-end pt-2">
               <Button
                 type="submit"
+                className="bg-sky-600 hover:bg-sky-700 text-white rounded-full px-6"
                 disabled={guardar.isPending || !form.formState.isDirty}
               >
-                {guardar.isPending && <Loader2 className="animate-spin" />}
-                Guardar
+                {guardar.isPending && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                Guardar Preferencias
               </Button>
             </div>
           </CardContent>
@@ -277,7 +281,6 @@ function PerfilViajeroForm({
   );
 }
 
-// Campo Select reutilizable ligado a RHF.
 function SelectField({
   control,
   name,
@@ -296,16 +299,16 @@ function SelectField({
       name={name}
       render={({ field }) => (
         <FormItem>
-          <FormLabel>{label}</FormLabel>
+          <FormLabel className="text-slate-200">{label}</FormLabel>
           <Select onValueChange={field.onChange} value={field.value || ''}>
             <FormControl>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Elegí…" />
+              <SelectTrigger className="w-full bg-slate-950/60 border-slate-800 text-white focus:border-sky-500">
+                <SelectValue placeholder="Seleccionar…" />
               </SelectTrigger>
             </FormControl>
-            <SelectContent>
+            <SelectContent className="bg-slate-900 border-slate-800 text-white">
               {options.map((o) => (
-                <SelectItem key={o} value={o} className="capitalize">
+                <SelectItem key={o} value={o} className="capitalize hover:bg-slate-800 focus:bg-slate-800 text-slate-200">
                   {o}
                 </SelectItem>
               ))}
@@ -328,34 +331,40 @@ function InteresesSection() {
   const disponibles = (catalogo ?? []).filter((i) => !misIds.has(i.id));
 
   return (
-    <Card>
+    <Card className="bg-slate-900/80 border border-slate-800/80 backdrop-blur-xl rounded-3xl shadow-xl">
       <CardHeader>
-        <CardTitle>Intereses generales</CardTitle>
-        <CardDescription>
-          Se aplican a todos tus viajes (podés priorizar otros por viaje).
+        <CardTitle className="text-xl font-bold text-white flex items-center gap-2">
+          <Heart className="w-5 h-5 text-sky-400" />
+          Intereses Generales
+        </CardTitle>
+        <CardDescription className="text-slate-400">
+          Actividades favoritas asociadas por defecto a tu perfil.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-5">
+      <CardContent className="space-y-6">
         <div>
-          <p className="text-muted-foreground mb-2 text-xs font-medium tracking-wide uppercase">
-            Tus intereses
+          <p className="text-slate-400 mb-3 text-xs font-semibold uppercase tracking-wider">
+            Tus Intereses Seleccionados
           </p>
           {mis && mis.length === 0 && (
-            <p className="text-muted-foreground text-sm">
-              Todavía no agregaste ninguno.
+            <p className="text-slate-500 text-sm italic">
+              Todavía no seleccionaste ninguno.
             </p>
           )}
           <div className="flex flex-wrap gap-2">
             {mis?.map((i) => (
-              <Badge key={i.id} variant="default" className="gap-1 capitalize">
+              <Badge
+                key={i.id}
+                className="bg-sky-600/20 text-sky-300 border border-sky-500/30 px-3 py-1.5 rounded-full text-xs font-medium gap-1.5 capitalize"
+              >
                 {i.nombre}
                 <button
                   type="button"
                   onClick={() => quitar.mutate(i.id)}
-                  className="hover:text-destructive-foreground -mr-1 ml-0.5"
+                  className="hover:text-red-400 transition-colors"
                   aria-label={`Quitar ${i.nombre}`}
                 >
-                  <X className="size-3" />
+                  <X className="w-3.5 h-3.5" />
                 </button>
               </Badge>
             ))}
@@ -364,8 +373,8 @@ function InteresesSection() {
 
         {disponibles.length > 0 && (
           <div>
-            <p className="text-muted-foreground mb-2 text-xs font-medium tracking-wide uppercase">
-              Agregar
+            <p className="text-slate-400 mb-3 text-xs font-semibold uppercase tracking-wider">
+              Agregar del Catálogo
             </p>
             <div className="flex flex-wrap gap-2">
               {disponibles.map((i) => (
@@ -374,12 +383,13 @@ function InteresesSection() {
                   type="button"
                   onClick={() => agregar.mutate({ id: i.id })}
                   disabled={agregar.isPending}
+                  className="transition-transform hover:scale-105"
                 >
                   <Badge
                     variant="outline"
-                    className="hover:bg-muted cursor-pointer gap-1 capitalize"
+                    className="bg-slate-950/40 border-slate-800 text-slate-300 hover:border-sky-500 hover:text-sky-400 px-3 py-1.5 rounded-full text-xs gap-1.5 capitalize cursor-pointer"
                   >
-                    <Plus className="size-3" />
+                    <Plus className="w-3.5 h-3.5 text-sky-400" />
                     {i.nombre}
                   </Badge>
                 </button>

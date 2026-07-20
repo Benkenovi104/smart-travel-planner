@@ -13,6 +13,7 @@ import { PresupuestosModule } from './presupuestos/presupuestos.module.js';
 import { LugaresModule } from './lugares/lugares.module.js';
 import { VuelosModule } from './vuelos/vuelos.module.js';
 import { AlojamientoModule } from './alojamiento/alojamiento.module.js';
+import { PerfilModule } from './perfil/perfil.module.js';
 import { validate } from './config/env.validation.js';
 
 @Module({
@@ -23,6 +24,7 @@ import { validate } from './config/env.validation.js';
     AuthModule,
     ViajesModule,
     UsuariosModule,
+    PerfilModule,
     ItinerariosModule,
     PresupuestosModule,
     LugaresModule,
