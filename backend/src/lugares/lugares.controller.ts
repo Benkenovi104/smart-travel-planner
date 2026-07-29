@@ -12,6 +12,15 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 export class LugaresController {
   constructor(private readonly lugaresService: LugaresService) {}
 
+  @Get('ciudades/autocomplete')
+  @ApiOperation({
+    summary:
+      'Sugerir ciudades/localidades para origen y destino vía Google Places Autocomplete',
+  })
+  autocompleteCiudades(@Query('q') query: string) {
+    return this.lugaresService.autocompleteCiudades(query ?? '');
+  }
+
   @Get()
   @ApiOperation({
     summary:

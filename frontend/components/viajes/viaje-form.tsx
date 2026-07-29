@@ -20,6 +20,7 @@ import { useIntereses } from '@/lib/query/use-usuario';
 import { toDateInput } from '@/lib/format';
 import type { CreateViajeInput } from '@/lib/api/viajes';
 import type { Viaje } from '@/lib/types/models';
+import { CiudadAutocomplete } from './ciudad-autocomplete';
 
 /**
  * Formulario de viaje compartido por el wizard de creación (`/viajes/nuevo`) y
@@ -133,7 +134,11 @@ export function ViajeFormFields({
             <FormItem>
               <FormLabel>Origen</FormLabel>
               <FormControl>
-                <Input placeholder="Buenos Aires" {...field} />
+                <CiudadAutocomplete
+                  value={field.value}
+                  onChange={field.onChange}
+                  placeholder="Ej: Buenos Aires, Argentina"
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -146,7 +151,11 @@ export function ViajeFormFields({
             <FormItem>
               <FormLabel>Destino</FormLabel>
               <FormControl>
-                <Input placeholder="París" {...field} />
+                <CiudadAutocomplete
+                  value={field.value}
+                  onChange={field.onChange}
+                  placeholder="Ej: Bariloche, Río Negro, Argentina"
+                />
               </FormControl>
               <FormMessage />
             </FormItem>

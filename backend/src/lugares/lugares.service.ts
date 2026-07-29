@@ -96,6 +96,13 @@ export class LugaresService {
   }
 
   /**
+   * Sugiere ciudades para Origen y Destino vía Google Places Autocomplete API.
+   */
+  async autocompleteCiudades(query: string) {
+    return this.googlePlaces.autocompleteCiudades(query);
+  }
+
+  /**
    * Búsqueda por texto sobre los lugares YA cacheados (tabla `lugares`), sin
    * pegarle a Google Places. Barata (una query) y pensada para el autocompletado
    * al agregar una actividad: `buscarYCachear` es el fallback cuando esto no

@@ -2,7 +2,24 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { qk } from './keys';
-import { buscarLugares, buscarLugaresEnCache } from '../api/lugares';
+import {
+  autocompleteCiudades,
+  buscarLugares,
+  buscarLugaresEnCache,
+} from '../api/lugares';
+
+/**
+ * Autocompletado de ciudades (Google Places) para Origen y Destino al crear/editar un viaje.
+ */
+export function useCiudadesAutocomplete(q: string, enabled = true) {
+  return useQuery({
+    queryKey: qk.ciudadesAutocomplete(q),
+    queryFn: () => autocompleteCiudades(q),
+    enabled: q.trim().length >= 2 && enabled,
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+  });
+}
 
 /**
  * Búsqueda por texto entre los lugares ya cacheados (una query barata). Es lo

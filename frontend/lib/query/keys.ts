@@ -6,6 +6,7 @@ export const qk = {
   lugares: (destino: string) => ['lugares', destino] as const,
   lugaresCache: (destino: string, q: string) =>
     ['lugares', 'cache', destino, q] as const,
+  ciudadesAutocomplete: (q: string) => ['lugares', 'ciudades', q] as const,
   viajes: ['viajes'] as const,
   viaje: (id: number) => ['viajes', id] as const,
   itinerario: (id: number) => ['viajes', id, 'itinerario'] as const,
