@@ -54,8 +54,12 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Cambiar la contraseña (autenticado)' })
   @ApiResponse({ status: 200, description: 'Contraseña actualizada.' })
-  @ApiResponse({ status: 401, description: 'La contraseña actual es incorrecta.' })
+  @ApiResponse({
+    status: 401,
+    description: 'La contraseña actual es incorrecta.',
+  })
   changePassword(@Request() req, @Body() dto: ChangePasswordDto) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
     return this.authService.changePassword(req.user.id_usuario, dto);
   }
 
