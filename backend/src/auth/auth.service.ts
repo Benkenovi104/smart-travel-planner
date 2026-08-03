@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   ConflictException,
   UnauthorizedException,
   BadRequestException,
@@ -23,6 +24,8 @@ const MENSAJE_FORGOT_GENERICO =
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
@@ -131,7 +134,18 @@ export class AuthService {
 
     const baseUrl = process.env.FRONTEND_URL ?? 'http://localhost:3001';
     const resetUrl = `${baseUrl}/reset-password?token=${rawToken}`;
-    await this.mail.enviarResetPassword(usuario.email, resetUrl);
+
+    // Si el envío falla, lo registramos pero devolvemos igual la respuesta
+    // genérica: un 500 acá sólo se daría para emails que existen, y eso
+    // permitiría enumerar qué cuentas están registradas.
+    try {
+      await this.mail.enviarResetPassword(usuario.email, resetUrl);
+    } catch (error) {
+      const mensaje = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `No se pudo enviar el email de reseteo a ${usuario.email}: ${mensaje}`,
+      );
+    }
 
     return { message: MENSAJE_FORGOT_GENERICO };
   }

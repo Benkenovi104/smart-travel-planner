@@ -64,7 +64,7 @@ describe('ViajesService', () => {
   });
 
   describe('create', () => {
-    it('mapea fechas y setea estado inicial planificado', async () => {
+    it('mapea fechas y setea estado inicial borrador', async () => {
       prisma.viaje.create.mockResolvedValue({ id_viaje: 1 });
       await service.create(1, {
         origen: 'Buenos Aires',
@@ -74,7 +74,7 @@ describe('ViajesService', () => {
       });
       const arg = prisma.viaje.create.mock.calls[0][0] as any;
       expect(arg.data.id_usuario).toBe(1);
-      expect(arg.data.estado).toBe('planificado');
+      expect(arg.data.estado).toBe('borrador');
       expect(arg.data.fechaInicio).toBeInstanceOf(Date);
       expect(arg.data.fechaFin).toBeInstanceOf(Date);
     });

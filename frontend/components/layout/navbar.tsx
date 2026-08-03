@@ -29,12 +29,12 @@ export function Navbar() {
         {/* Brand */}
         <Link
           href="/dashboard"
-          className="flex items-center gap-2.5 font-bold tracking-tight text-white group"
+          className="flex shrink-0 items-center gap-2.5 font-bold tracking-tight text-white group"
         >
           <div className="p-2 rounded-xl bg-linear-to-br from-sky-500 to-blue-600 text-white shadow-md shadow-sky-500/20 group-hover:scale-105 transition-transform duration-200">
             <Plane className="w-4 h-4" />
           </div>
-          <span className="text-lg bg-linear-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
+          <span className="text-lg whitespace-nowrap bg-linear-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
             Smart Travel
           </span>
           <span className="hidden sm:inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20">
@@ -44,7 +44,7 @@ export function Navbar() {
         </Link>
 
         {/* Navigation */}
-        <nav className="flex items-center gap-1 sm:gap-2">
+        <nav className="flex shrink-0 items-center gap-1 sm:gap-2">
           {LINKS.map((link) => {
             const active = pathname.startsWith(link.href);
             const Icon = link.icon;
@@ -52,15 +52,20 @@ export function Navbar() {
               <Link
                 key={link.href}
                 href={link.href}
+                // Abajo de `sm` la etiqueta se esconde y queda sólo el ícono:
+                // con marca + 2 etiquetas + logout no entra a 412px y el header
+                // se partía en dos líneas. Mismo criterio que "Cerrar Sesión".
+                aria-label={link.label}
+                title={link.label}
                 className={cn(
-                  'flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-medium transition-all duration-200',
+                  'flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-all duration-200 sm:px-3.5',
                   active
                     ? 'bg-sky-500/15 text-sky-400 border border-sky-500/30 shadow-sm'
                     : 'text-slate-400 hover:text-white hover:bg-slate-900',
                 )}
               >
-                <Icon className="w-3.5 h-3.5" />
-                {link.label}
+                <Icon className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">{link.label}</span>
               </Link>
             );
           })}
@@ -68,9 +73,11 @@ export function Navbar() {
           <Button
             variant="ghost"
             size="sm"
-            className="ml-2 gap-1.5 text-xs text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-full transition-all duration-200"
+            className="ml-1 gap-1.5 text-xs whitespace-nowrap text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-full transition-all duration-200 sm:ml-2"
             onClick={onLogout}
             disabled={logout.isPending}
+            aria-label="Cerrar sesión"
+            title="Cerrar sesión"
           >
             <LogOut className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Cerrar Sesión</span>

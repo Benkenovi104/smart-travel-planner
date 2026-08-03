@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import {
@@ -44,6 +44,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { EstadoSelect } from '@/components/viajes/estado-select';
+import { PRIMER_PASO } from '@/components/viajes/wizard-pasos';
 import { EditarViajeDialog } from '@/components/viajes/editar-viaje-dialog';
 import { EditableItinerario } from '@/components/itinerario/editable-itinerario';
 import { HistorialCambios } from '@/components/itinerario/historial-cambios';
@@ -68,6 +69,13 @@ export default function ViajeDetallePage() {
 
   const [tab, setTab] = useState('itinerario');
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+
+  // Un viaje en borrador todavía no terminó el wizard de creación: lo
+  // retomamos donde corresponde en vez de mostrar el detalle a medio armar.
+  const esBorrador = viaje?.estado === 'borrador';
+  useEffect(() => {
+    if (esBorrador) router.replace(`/viajes/${id}/crear?paso=${PRIMER_PASO}`);
+  }, [esBorrador, id, router]);
 
   function toggleCollapse(idDia: number) {
     setCollapsed((prev) => {
@@ -121,7 +129,9 @@ export default function ViajeDetallePage() {
     });
   }
 
-  if (isLoading) {
+  // `esBorrador` entra acá para no mostrar el detalle un frame antes de que el
+  // efecto de arriba redirija al wizard.
+  if (isLoading || esBorrador) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-8 w-40" />

@@ -277,7 +277,11 @@ function DiaColumn({
   return (
     <Card id={`dia-${dia.id}`} className="scroll-mt-20">
       <CardHeader>
-        <div className="flex items-center justify-between gap-2">
+        {/* `flex-wrap` para que en pantallas angostas las acciones bajen a una
+            segunda línea en vez de desbordar la card. El título no lleva
+            `min-w-0`: así su ancho mínimo es el del texto y es lo que fuerza el
+            salto, en lugar de aplastarse hasta partir la fecha en columna. */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <button
             type="button"
             onClick={onToggle}
@@ -292,12 +296,14 @@ function DiaColumn({
             <span className="bg-primary text-primary-foreground flex size-7 shrink-0 items-center justify-center rounded-full text-sm">
               {dia.numeroDia}
             </span>
-            <span className="font-semibold">Día {dia.numeroDia}</span>
-            <span className="text-muted-foreground text-sm">
+            <span className="font-semibold whitespace-nowrap">
+              Día {dia.numeroDia}
+            </span>
+            <span className="text-muted-foreground text-sm whitespace-nowrap">
               · {formatFecha(dia.fecha)}
             </span>
           </button>
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2">
             {!open && cantidad > 0 && (
               <span className="text-muted-foreground text-sm">
                 {cantidad} {cantidad === 1 ? 'actividad' : 'actividades'}

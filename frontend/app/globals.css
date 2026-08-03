@@ -3,6 +3,12 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  /* La app es dark-only. Sin esto el navegador asume fondo claro y dibuja los
+     controles nativos (ícono del calendario en los `date`, flechitas de los
+     `number`, scrollbars, el popup del calendario) con glifos oscuros pensados
+     para fondo blanco: quedan invisibles sobre nuestro fondo. */
+  color-scheme: dark;
+
   --radius: 0.875rem;
   --background: oklch(0.11 0.02 260);
   --foreground: oklch(0.985 0 0);
@@ -81,5 +87,31 @@
     background-color: var(--background);
     color: var(--foreground);
     min-height: 100vh;
+  }
+
+  /* El ícono del calendario abre el date picker, así que se comporta como un
+     botón: cursor de mano y se aviva al pasar por encima. Atenuado en reposo
+     para no competir con el texto de la fecha. */
+  input[type='date']::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.55;
+    border-radius: var(--radius-sm);
+    padding: 2px;
+    transition: opacity 150ms ease;
+  }
+  input[type='date']::-webkit-calendar-picker-indicator:hover,
+  input[type='date']:focus-within::-webkit-calendar-picker-indicator {
+    opacity: 1;
+  }
+
+  /* Las flechitas de los `number` sólo aparecen al hacer hover/foco en Chrome;
+     con `color-scheme: dark` ya se dibujan claras, esto sólo las hace obvias. */
+  input[type='number']::-webkit-inner-spin-button {
+    opacity: 0.55;
+    cursor: pointer;
+  }
+  input[type='number']:hover::-webkit-inner-spin-button,
+  input[type='number']:focus::-webkit-inner-spin-button {
+    opacity: 1;
   }
 }

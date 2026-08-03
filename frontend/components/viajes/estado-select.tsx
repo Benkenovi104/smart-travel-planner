@@ -10,7 +10,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { EstadoBadge, ESTADOS_VIAJE, ESTADO_MAP } from './estado-badge';
+import {
+  EstadoBadge,
+  ESTADOS_VIAJE_MANUALES,
+  ESTADO_MAP,
+} from './estado-badge';
 import { useActualizarViaje } from '@/lib/query/use-viajes';
 import { ApiError } from '@/lib/api/client';
 import type { EstadoViaje } from '@/lib/types/models';
@@ -58,7 +62,7 @@ export function EstadoSelect({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
-        {ESTADOS_VIAJE.map((e) => (
+        {ESTADOS_VIAJE_MANUALES.map((e) => (
           <DropdownMenuItem key={e} onSelect={() => cambiar(e)}>
             <Check
               className={e === estado ? 'size-4 opacity-100' : 'size-4 opacity-0'}

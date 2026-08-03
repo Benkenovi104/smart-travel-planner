@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { lanzarSiSinCuota } from '../common/rapidapi-cuota.js';
 
 export interface HotelOpcion {
   /**
@@ -112,6 +113,7 @@ export class BookingService {
     url.searchParams.set('query', nombre);
 
     const res = await fetch(url, { headers: this.headers() });
+    lanzarSiSinCuota(res, 'alojamiento');
     if (!res.ok) {
       this.logger.warn(
         `searchDestination falló para "${nombre}": HTTP ${res.status}`,
@@ -160,6 +162,7 @@ export class BookingService {
     url.searchParams.set('languagecode', 'es');
 
     const res = await fetch(url, { headers: this.headers() });
+    lanzarSiSinCuota(res, 'alojamiento');
     if (!res.ok) {
       this.logger.warn(
         `searchHotels falló (dest_id=${params.destino.destId}): HTTP ${res.status}`,

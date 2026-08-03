@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,7 @@ import {
   useViajeForm,
   type ViajeFormValues,
 } from '@/components/viajes/viaje-form';
+import { PRIMER_PASO, WizardPasos } from '@/components/viajes/wizard-pasos';
 import { useCrearViaje } from '@/lib/query/use-viajes';
 import { ApiError } from '@/lib/api/client';
 
@@ -31,8 +32,9 @@ export default function NuevoViajePage() {
   function onSubmit(values: ViajeFormValues) {
     crear.mutate(toViajePayload(values, intereses), {
       onSuccess: (viaje) => {
-        toast.success('Viaje creado');
-        router.replace(`/viajes/${viaje.id}`);
+        // El viaje nace en borrador: seguimos al paso 2 del wizard, que ya
+        // necesita el id para poder buscar vuelos.
+        router.replace(`/viajes/${viaje.id}/crear?paso=${PRIMER_PASO}`);
       },
       onError: (e) =>
         toast.error(
@@ -42,7 +44,7 @@ export default function NuevoViajePage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6">
       <Button variant="ghost" size="sm" asChild className="-ml-2">
         <Link href="/dashboard">
           <ArrowLeft className="size-4" />
@@ -50,12 +52,14 @@ export default function NuevoViajePage() {
         </Link>
       </Button>
 
+      <WizardPasos actual={1} />
+
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">Nuevo viaje</CardTitle>
+          <CardTitle className="text-2xl">¿A dónde vas?</CardTitle>
           <CardDescription>
-            Contanos a dónde vas y qué te interesa; después generamos el
-            itinerario.
+            Contanos el destino, las fechas y qué te interesa. Después vas a
+            poder elegir vuelo y alojamiento.
           </CardDescription>
         </CardHeader>
         <Form {...form}>
@@ -74,7 +78,8 @@ export default function NuevoViajePage() {
               </Button>
               <Button type="submit" disabled={crear.isPending}>
                 {crear.isPending && <Loader2 className="animate-spin" />}
-                Crear viaje
+                Siguiente
+                <ArrowRight className="size-4" />
               </Button>
             </div>
           </form>

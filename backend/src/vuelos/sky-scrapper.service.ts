@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { lanzarSiSinCuota } from '../common/rapidapi-cuota.js';
 
 export interface VueloOpcion {
   origen: string;
@@ -75,6 +76,7 @@ export class SkyScrapperService {
     url.searchParams.set('query', ciudad);
 
     const res = await fetch(url, { headers: this.headers() });
+    lanzarSiSinCuota(res, 'vuelos');
     if (!res.ok) {
       this.logger.warn(
         `searchAirport falló para "${nombre}": HTTP ${res.status}`,
@@ -127,6 +129,7 @@ export class SkyScrapperService {
     const INTENTOS = 3;
     for (let intento = 1; intento <= INTENTOS; intento++) {
       const res = await fetch(url, { headers: this.headers() });
+      lanzarSiSinCuota(res, 'vuelos');
       if (!res.ok) {
         this.logger.warn(
           `searchFlights falló (${params.origen.skyId} -> ${params.destino.skyId}): HTTP ${res.status}`,

@@ -57,7 +57,9 @@ export class ViajesService {
         fechaFin: new Date(data.fecha_fin),
         cantidadPersonas: data.cantidad_personas,
         presupuestoTotal: data.presupuesto_total,
-        estado: 'planificado',
+        // Nace como borrador: el wizard de creación lo pasa a 'planificado'
+        // cuando el usuario termina de elegir vuelo y alojamiento.
+        estado: 'borrador',
         fecha_creacion: new Date(),
         ...(intereses?.length && {
           viaje_intereses: {

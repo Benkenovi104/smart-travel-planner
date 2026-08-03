@@ -192,6 +192,22 @@ describe('AuthService', () => {
       expect(to).toBe('juan@test.com');
       expect(url).toContain('token=');
     });
+
+    it('si falla el envío responde genérico igual, para no filtrar qué emails existen', async () => {
+      prisma.usuario.findUnique.mockResolvedValue({
+        id_usuario: 7,
+        email: 'juan@test.com',
+      });
+      prisma.usuario.update.mockResolvedValue({});
+      mail.enviarResetPassword.mockRejectedValue(
+        new Error('Invalid login: 535-5.7.8'),
+      );
+
+      const res = await service.forgotPassword({ email: 'juan@test.com' });
+      // misma respuesta que para un email inexistente: sin esto, un 500 acá
+      // delataría que la cuenta está registrada
+      expect(res.message).toMatch(/si el email está registrado/i);
+    });
   });
 
   describe('resetPassword', () => {

@@ -21,15 +21,20 @@ La plataforma permite que cada usuario cree una cuenta, configure su **perfil de
 
 ```
 1. Registro → Configuración del perfil de viajero
-2. Creación del viaje (destino, fechas, personas, presupuesto, intereses específicos)
-3. Consulta de servicios externos (lugares reales del destino)
-4. Generación automática del itinerario por días con IA
-5. Edición manual: agregar, editar, mover y reordenar actividades
-6. Elección de vuelo y alojamiento → se suman al presupuesto
-7. Visualización en mapa y seguimiento del presupuesto
+2. Creación del viaje, guiada en 4 pasos:
+     1) Datos: destino, fechas, personas, presupuesto e intereses del viaje
+     2) Elección de vuelo         ← opcional, se puede omitir
+     3) Elección de alojamiento   ← opcional, se puede omitir
+     4) Resumen y generación del itinerario
+3. Al generar: consulta de lugares reales del destino + armado del plan día por día con IA
+4. Edición manual: agregar, editar, mover y reordenar actividades
+5. Optimización del recorrido de cada día (minimiza traslados)
+6. Visualización en mapa y seguimiento del presupuesto
 ```
 
-> El paso de **optimización de recorridos** (minimizar traslados con heurísticas tipo TSP) sigue pendiente: hoy el orden de las actividades lo propone la IA y el usuario lo ajusta a mano.
+> **Creación guiada.** Hasta hace poco sólo el paso de datos estaba pautado y el resto quedaba a criterio del usuario: se podía elegir hotel antes que vuelo, o generar el itinerario sin ninguno de los dos. Ahora la primera pasada sigue una secuencia fija. Vuelos y alojamiento son los únicos pasos salteables, y se pueden completar después desde las pestañas del viaje, como siempre.
+>
+> Mientras el wizard está en curso el viaje vive en estado **`borrador`**: ya existe en la base (hace falta para buscar vuelos y alojamiento, que van scopeados al viaje), aparece en el dashboard marcado como tal y con un botón para retomarlo en el paso donde quedó. Al terminar pasa a `planificado` y se abre la vista completa con pestañas (Itinerario, Mapa, Presupuesto, Vuelos, Alojamiento).
 
 ## Perfil de Viajero e Intereses
 
@@ -45,6 +50,7 @@ Un usuario con intereses generales en gastronomía y cultura puede priorizar nie
 
 | Funcionalidad | Estado | Descripción |
 |---|---|---|
+| Creación guiada del viaje | ✅ | Wizard de 4 pasos (datos → vuelo → alojamiento → resumen); vuelo y alojamiento son salteables |
 | Generación de itinerarios | ✅ | Plan completo por días según destino, fechas, presupuesto e intereses (Gemini) |
 | Recomendaciones personalizadas | ✅ | Combina perfil general + intereses del viaje + lugares reales del destino |
 | Visualización en mapa | ✅ | Marcadores numerados y rutas por día, filtro por día y pin del alojamiento elegido |
@@ -68,6 +74,8 @@ Un usuario con intereses generales en gastronomía y cultura puede priorizar nie
 ### Viajes
 - `viajes` — Cada viaje creado (destino, fechas, personas, presupuesto, estado)
 - `viaje_intereses` — Intereses específicos de cada viaje
+
+El `estado` arranca en `borrador` mientras el usuario recorre el wizard de creación y pasa a `planificado` al terminarlo; de ahí en más lo maneja el usuario (`en_progreso`, `completado`, `cancelado`). `borrador` es el único que no se puede setear a mano.
 
 ### Planificación del Itinerario
 - `itinerarios` — Plan general generado para un viaje
@@ -100,7 +108,9 @@ Ambas tienen un flag `seleccionado`: a lo sumo una opción de cada tipo queda el
 | Alojamiento | Booking.com (`booking-com15`), vía RapidAPI | Mirror no oficial |
 | Email | Nodemailer + SMTP (Gmail) | Recuperación de contraseña |
 
-Vuelos y alojamiento usan el free tier de RapidAPI: al probar repetidas veces devuelven **429**, y eso no es un bug. Para desarrollar sin gastar cuota existe `RAPIDAPI_MOCK=true`, que usa datos fixture.
+Vuelos y alojamiento usan el free tier de RapidAPI, que es **muy** chico: el plan BASIC de Sky Scrapper son 20 requests por mes y **cada búsqueda de vuelos gasta 4** (resolver los dos aeropuertos + ida y vuelta), o sea 5 búsquedas mensuales. Cuando se agota, la API devuelve **429 y eso no es un bug**; el backend lo propaga como un 429 con un mensaje claro en vez de confundirlo con un destino irresoluble. Ojo que el ciclo de RapidAPI se cuenta **desde el día de alta de la suscripción, no desde el 1° de cada mes**. Cada API tiene su cuota propia: que se agote la de vuelos no afecta a la de alojamiento.
+
+Para desarrollar sin gastar cuota existe `RAPIDAPI_MOCK=true`, que usa datos fixture.
 
 ## Stack Tecnológico
 
@@ -178,7 +188,7 @@ Arranca en `http://localhost:3001`. Necesita el backend corriendo.
 | `npm run start:dev` | Servidor en modo desarrollo (watch) |
 | `npm run start:prod` | Servidor en modo producción (requiere `npm run build`) |
 | `npm run seed` | Carga el catálogo de intereses (idempotente) |
-| `npm run test` | Tests unitarios (9 suites, 49 tests) |
+| `npm run test` | Tests unitarios (11 suites, 78 tests) |
 | `npm run test:e2e` | Tests end-to-end (hace una llamada real a Gemini) |
 | `npm run lint` | ESLint con `--fix` |
 
@@ -200,6 +210,7 @@ Arranca en `http://localhost:3001`. Necesita el backend corriendo.
 - [x] Gestión de cuenta: cambio de contraseña, recuperación por email, borrado de cuenta
 - [x] Perfil de viajero e intereses generales
 - [x] Creación de viajes con intereses específicos
+- [x] Creación guiada por pasos (datos → vuelo → alojamiento → resumen), con los viajes a medio armar guardados como borrador y retomables
 - [x] Consulta de lugares turísticos desde APIs (Google Places, cacheado)
 - [x] Generación automática del itinerario por días (Gemini)
 - [x] Edición manual del itinerario (agregar, editar, eliminar, drag & drop entre días)

@@ -70,6 +70,7 @@ export interface MeApi {
 
 // ---------- Viajes ----------
 export type EstadoViaje =
+  | 'borrador'
   | 'planificado'
   | 'en_progreso'
   | 'completado'
