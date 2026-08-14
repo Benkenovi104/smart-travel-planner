@@ -1,6 +1,6 @@
 'use client';
 
-import { UseFormReturn } from 'react-hook-form';
+import { UseFormReturn, useWatch } from 'react-hook-form';
 import { PerfilFormValues } from '@/lib/validations/perfil';
 import { Card } from '@/components/ui/card';
 import { Backpack, Hotel, Gem } from 'lucide-react';
@@ -35,7 +35,7 @@ const PRESUPUESTOS = [
 ];
 
 export function StepPresupuesto({ form }: StepProps) {
-  const selected = form.watch('presupuestoPreferido');
+  const selected = useWatch({ control: form.control, name: 'presupuestoPreferido' });
 
   return (
     <div className="space-y-6">

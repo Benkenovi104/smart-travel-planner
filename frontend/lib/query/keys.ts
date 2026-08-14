@@ -12,6 +12,8 @@ export const qk = {
   itinerario: (id: number) => ['viajes', id, 'itinerario'] as const,
   cambios: (id: number) => ['viajes', id, 'itinerario', 'cambios'] as const,
   presupuesto: (id: number) => ['viajes', id, 'presupuesto'] as const,
+  perfilMe: ['perfil', 'me'] as const,
   vuelos: (id: number) => ['viajes', id, 'vuelos'] as const,
   alojamiento: (id: number) => ['viajes', id, 'alojamiento'] as const,
 };
+

@@ -180,6 +180,23 @@ export function normalizeVuelo(v: OpcionVueloApi): OpcionVuelo {
 }
 
 export function normalizeAlojamiento(a: OpcionAlojamientoApi): OpcionAlojamiento {
+  let fotoUrl: string | undefined = undefined;
+  let fotos: string[] | undefined = undefined;
+  let razonRecomendacion: string | undefined = undefined;
+  let webUrl: string | null = a.url_referencia;
+
+  if (a.url_referencia && a.url_referencia.trim().startsWith('{')) {
+    try {
+      const parsed = JSON.parse(a.url_referencia);
+      webUrl = parsed.url || parsed.googleMapsUri || null;
+      fotoUrl = parsed.fotoUrl || undefined;
+      fotos = Array.isArray(parsed.fotos) && parsed.fotos.length > 0 ? parsed.fotos : (parsed.fotoUrl ? [parsed.fotoUrl] : undefined);
+      razonRecomendacion = parsed.razon || undefined;
+    } catch {
+      webUrl = a.url_referencia;
+    }
+  }
+
   return {
     id: a.id_alojamiento,
     nombre: a.nombre,
@@ -189,7 +206,12 @@ export function normalizeAlojamiento(a: OpcionAlojamientoApi): OpcionAlojamiento
     rating: num(a.rating),
     lat: num(a.latitud),
     lng: num(a.longitud),
-    url: a.url_referencia,
+    url: webUrl,
+    fotoUrl,
+    fotos,
+    razonRecomendacion,
     seleccionado: a.seleccionado ?? false,
   };
 }
+
+

@@ -7,6 +7,6 @@ import { GeocodingService } from './geocoding.service.js';
 @Module({
   providers: [LugaresService, GooglePlacesService, GeocodingService],
   controllers: [LugaresController],
-  exports: [LugaresService, GeocodingService],
+  exports: [LugaresService, GooglePlacesService, GeocodingService],
 })
 export class LugaresModule {}

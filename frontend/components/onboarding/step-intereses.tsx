@@ -1,6 +1,6 @@
 'use client';
 
-import { UseFormReturn } from 'react-hook-form';
+import { UseFormReturn, useWatch } from 'react-hook-form';
 import { useQuery } from '@tanstack/react-query';
 import { PerfilFormValues } from '@/lib/validations/perfil';
 import { Badge } from '@/components/ui/badge';
@@ -18,7 +18,7 @@ interface InteresItem {
 }
 
 export function StepIntereses({ form }: StepProps) {
-  const selectedIds = form.watch('interesesIds') || [];
+  const selectedIds = useWatch({ control: form.control, name: 'interesesIds' }) || [];
 
   const { data: intereses, isLoading, isError } = useQuery<InteresItem[]>({
     queryKey: ['intereses-catalogo'],

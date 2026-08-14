@@ -1,6 +1,6 @@
 'use client';
 
-import { UseFormReturn } from 'react-hook-form';
+import { UseFormReturn, useWatch } from 'react-hook-form';
 import { PerfilFormValues } from '@/lib/validations/perfil';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -26,8 +26,8 @@ const MOVILIDAD = [
 ];
 
 export function StepRestricciones({ form }: StepProps) {
-  const selectedDietas = form.watch('dietas') || ['NINGUNA'];
-  const selectedMovilidad = form.watch('movilidad') || ['NINGUNA'];
+  const selectedDietas = useWatch({ control: form.control, name: 'dietas' }) || ['NINGUNA'];
+  const selectedMovilidad = useWatch({ control: form.control, name: 'movilidad' }) || ['NINGUNA'];
 
   const toggleDieta = (id: string) => {
     let current = [...selectedDietas];

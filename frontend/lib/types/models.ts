@@ -154,5 +154,10 @@ export interface OpcionAlojamiento {
   lat: number | null;
   lng: number | null;
   url: string | null;
+  fotoUrl?: string;
+  fotos?: string[];
+  razonRecomendacion?: string;
   seleccionado: boolean;
 }
+
+

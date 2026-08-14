@@ -9,6 +9,6 @@ import { LugaresModule } from '../lugares/lugares.module.js';
   imports: [PresupuestosModule, LugaresModule],
   providers: [ItinerariosService, GeminiService],
   controllers: [ItinerariosController],
-  exports: [ItinerariosService],
+  exports: [ItinerariosService, GeminiService],
 })
 export class ItinerariosModule {}

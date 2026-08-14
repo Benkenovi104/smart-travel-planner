@@ -3,9 +3,11 @@ import { AlojamientoService } from './alojamiento.service.js';
 import { AlojamientoController } from './alojamiento.controller.js';
 import { BookingService } from './booking.service.js';
 import { PresupuestosModule } from '../presupuestos/presupuestos.module.js';
+import { LugaresModule } from '../lugares/lugares.module.js';
+import { ItinerariosModule } from '../itinerarios/itinerarios.module.js';
 
 @Module({
-  imports: [PresupuestosModule],
+  imports: [PresupuestosModule, LugaresModule, ItinerariosModule],
   providers: [AlojamientoService, BookingService],
   controllers: [AlojamientoController],
   exports: [AlojamientoService],

@@ -165,4 +165,84 @@ Responde ÚNICAMENTE con un JSON válido con esta estructura exacta, sin texto a
     const diff = fin.getTime() - inicio.getTime();
     return Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1;
   }
+
+  async sugerirAlojamientos(params: {
+    destino: string;
+    presupuestoTotal?: number;
+    cantidadPersonas: number;
+    ritmoPreferido?: string;
+    presupuestoPreferido?: string;
+    hotelesDisponibles: Array<{
+      id: string;
+      nombre: string;
+      direccion: string | null;
+      rating: number | null;
+      userRatingCount: number | null;
+    }>;
+  }): Promise<
+    Array<{
+      id: string;
+      razonRecomendacion: string;
+      precioEstimadoPorNoche: number;
+    }>
+  > {
+    if (!params.hotelesDisponibles || params.hotelesDisponibles.length === 0) {
+      return [];
+    }
+
+    const prompt = `Eres un experto asesor de viajes. Analiza la siguiente lista de hoteles reales en ${params.destino} y selecciona las 3 a 4 mejores opciones para el perfil de viaje.
+
+PERFIL DEL VIAJE:
+- Destino: ${params.destino}
+- Personas: ${params.cantidadPersonas}
+${params.presupuestoTotal ? `- Presupuesto total viaje: USD ${params.presupuestoTotal}` : ''}
+${params.presupuestoPreferido ? `- Nivel de presupuesto preferido: ${params.presupuestoPreferido}` : ''}
+${params.ritmoPreferido ? `- Ritmo de viaje: ${params.ritmoPreferido}` : ''}
+
+CANDIDATOS REALES DE HOTELES:
+${params.hotelesDisponibles
+  .map(
+    (h) =>
+      `- ID: "${h.id}" | Nombre: "${h.nombre}" | Dirección: "${h.direccion ?? 'N/A'}" | Rating: ${h.rating ?? 'N/A'} (${h.userRatingCount ?? 0} opiniones)`,
+  )
+  .join('\n')}
+
+INSTRUCCIONES:
+1. Selecciona entre 3 y 4 mejores hoteles de la lista proporcionada.
+2. Para cada hotel seleccionado, genera un breve texto de justificación ultracorto y conciso ("razonRecomendacion") de MÁXIMO 12 PALABRAS explicando por qué destaca para este viaje.
+3. Asigna un precio estimado razonable por noche en USD por habitación ("precioEstimadoPorNoche") alineado con la calidad y presupuesto.
+
+
+Responde ÚNICAMENTE en JSON con esta estructura exacta sin markdown adicional:
+[
+  {
+    "id": "ID_DEL_HOTEL",
+    "razonRecomendacion": "Excelente opción céntrica ideal para descansar en pareja...",
+    "precioEstimadoPorNoche": 120
+  }
+]`;
+
+    try {
+      const response = await this.client.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          temperature: 0.7,
+        },
+      });
+
+      const text = response.text;
+      if (!text) return [];
+
+      return JSON.parse(text) as Array<{
+        id: string;
+        razonRecomendacion: string;
+        precioEstimadoPorNoche: number;
+      }>;
+    } catch (error) {
+      this.logger.error('Error al calificar alojamientos con Gemini', error);
+      return [];
+    }
+  }
 }

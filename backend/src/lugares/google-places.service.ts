@@ -30,6 +30,25 @@ const AUTOCOMPLETE_URL = 'https://places.googleapis.com/v1/places:autocomplete';
 const FIELD_MASK =
   'places.displayName,places.formattedAddress,places.location,places.rating';
 
+export interface HotelGoogle {
+  id: string;
+  nombre: string;
+  direccion: string | null;
+  latitud: number;
+  longitud: number;
+  rating: number | null;
+  userRatingCount: number | null;
+  websiteUri: string | null;
+  googleMapsUri: string | null;
+  fotoUrl: string | null;
+  fotos: string[];
+  priceLevel: string | null;
+}
+
+
+const HOTEL_FIELD_MASK =
+  'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.websiteUri,places.googleMapsUri,places.photos,places.priceLevel';
+
 @Injectable()
 export class GooglePlacesService {
   private readonly logger = new Logger(GooglePlacesService.name);
@@ -88,6 +107,7 @@ export class GooglePlacesService {
             p.structuredFormat?.mainText?.text ??
             descripcion.split(',')[0].trim();
           const secondaryText = p.structuredFormat?.secondaryText?.text;
+
           const pais = secondaryText
             ? (secondaryText.split(',').pop()?.trim() ?? null)
             : null;
@@ -139,10 +159,6 @@ export class GooglePlacesService {
 
     const data = (await res.json()) as { places?: PlaceGoogle[] };
 
-    // Normalizamos a solo el nombre de la ciudad (sin país/provincia) porque
-    // es lo que Gemini también usa en el campo "ciudad" de cada actividad —
-    // si no coinciden, el matching por nombre+ciudad para reusar el lugar
-    // cacheado en itinerarios.service.ts nunca encuentra el registro.
     const ciudad = destino.split(',')[0].trim();
 
     return (data.places ?? [])
@@ -157,5 +173,89 @@ export class GooglePlacesService {
         categoria,
         rating: p.rating ?? null,
       }));
+  }
+
+  /**
+   * Busca alojamientos reales en un destino usando Google Places New Text Search.
+   */
+  async buscarAlojamientosGoogle(
+    destino: string,
+    limit = 8,
+  ): Promise<HotelGoogle[]> {
+    if (!this.apiKey) {
+      this.logger.warn('GOOGLE_PLACES_API_KEY no configurada');
+      return [];
+    }
+
+    try {
+      const res = await fetch(TEXT_SEARCH_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': this.apiKey,
+          'X-Goog-FieldMask': HOTEL_FIELD_MASK,
+        },
+        body: JSON.stringify({
+          textQuery: `hoteles o alojamientos en ${destino}`,
+          includedType: 'lodging',
+          pageSize: limit,
+          languageCode: 'es',
+        }),
+      });
+
+      if (!res.ok) {
+        this.logger.warn(
+          `Búsqueda de alojamientos en "${destino}" falló: HTTP ${res.status}`,
+        );
+        return [];
+      }
+
+      const data = (await res.json()) as {
+        places?: Array<{
+          id?: string;
+          displayName?: { text: string };
+          formattedAddress?: string;
+          location?: { latitude: number; longitude: number };
+          rating?: number;
+          userRatingCount?: number;
+          websiteUri?: string;
+          googleMapsUri?: string;
+          photos?: Array<{ name: string }>;
+          priceLevel?: string;
+        }>;
+      };
+
+      return (data.places ?? [])
+        .filter((p) => p.displayName && p.location)
+        .map((p) => {
+          const fotos: string[] = (p.photos ?? [])
+            .slice(0, 5)
+            .map(
+              (ph) =>
+                `https://places.googleapis.com/v1/${ph.name}/media?key=${this.apiKey}&maxHeightPx=600`,
+            );
+
+          const fotoUrl = fotos[0] ?? null;
+
+          return {
+            id: p.id ?? p.displayName!.text,
+            nombre: p.displayName!.text,
+            direccion: p.formattedAddress ?? null,
+            latitud: p.location!.latitude,
+            longitud: p.location!.longitude,
+            rating: p.rating ?? null,
+            userRatingCount: p.userRatingCount ?? null,
+            websiteUri: p.websiteUri ?? null,
+            googleMapsUri: p.googleMapsUri ?? null,
+            fotoUrl,
+            fotos,
+            priceLevel: p.priceLevel ?? null,
+          };
+        });
+
+    } catch (error) {
+      this.logger.error(`Error en buscarAlojamientosGoogle: ${error}`);
+      return [];
+    }
   }
 }

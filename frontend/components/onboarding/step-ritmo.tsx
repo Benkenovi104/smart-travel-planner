@@ -1,6 +1,6 @@
 'use client';
 
-import { UseFormReturn } from 'react-hook-form';
+import { UseFormReturn, useWatch } from 'react-hook-form';
 import { PerfilFormValues } from '@/lib/validations/perfil';
 import { Card } from '@/components/ui/card';
 import { Zap, Scale, Heart } from 'lucide-react';
@@ -35,7 +35,7 @@ const RITMOS = [
 ];
 
 export function StepRitmo({ form }: StepProps) {
-  const selected = form.watch('ritmoPreferido');
+  const selected = useWatch({ control: form.control, name: 'ritmoPreferido' });
 
   return (
     <div className="space-y-6">
