@@ -45,7 +45,6 @@ export interface HotelGoogle {
   priceLevel: string | null;
 }
 
-
 const HOTEL_FIELD_MASK =
   'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.websiteUri,places.googleMapsUri,places.photos,places.priceLevel';
 
@@ -252,7 +251,6 @@ export class GooglePlacesService {
             priceLevel: p.priceLevel ?? null,
           };
         });
-
     } catch (error) {
       this.logger.error(`Error en buscarAlojamientosGoogle: ${error}`);
       return [];

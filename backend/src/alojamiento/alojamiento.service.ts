@@ -95,7 +95,6 @@ export class AlojamientoService {
             `Excelente hospedaje con alta puntuación en ${viaje.destino_principal}.`,
         };
 
-
         return {
           id_viaje,
           nombre: h.nombre,
