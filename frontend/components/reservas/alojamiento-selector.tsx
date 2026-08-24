@@ -39,7 +39,6 @@ import { cn } from '@/lib/utils';
 import type { OpcionAlojamiento, Viaje } from '@/lib/types/models';
 import { mensajeDeError } from './opcion';
 
-// Mapa Leaflet importado dinámicamente sin SSR
 const MapaItinerario = dynamic(() => import('@/components/mapa/mapa-itinerario'), {
   ssr: false,
   loading: () => <Skeleton className="h-80 w-full rounded-xl" />,
@@ -149,6 +148,7 @@ export function AlojamientoSelector({
       );
 
     if (requiereBusqueda) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAutoBuscado(true);
       buscar.mutate(undefined, {
         onError: () => {},
@@ -337,7 +337,7 @@ export function AlojamientoSelector({
                   </div>
                 </CardContent>
 
-                <CardFooter className="p-4 pt-0 flex flex-wrap gap-2 justify-between border-t border-muted/30 pt-3">
+                <CardFooter className="p-4 flex flex-wrap gap-2 justify-between border-t border-muted/30 pt-3">
                   <div className="flex gap-2">
                     {/* Botón Sitio Web Oficial */}
                     {a.url && (
