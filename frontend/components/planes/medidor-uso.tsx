@@ -7,8 +7,12 @@ import { Progress } from '@/components/ui/progress';
 import { useMiPlan } from '@/lib/query/use-planes';
 import { formatFecha } from '@/lib/format';
 
-/** Plan actual y cuántos viajes del período lleva usados. */
-export function MedidorUso() {
+/**
+ * Plan actual y cuántos viajes del período lleva usados. Con `soloUso` no muestra
+ * el link a los planes ni el aviso de pago, para usarlo dentro de una tarjeta que
+ * ya los tiene.
+ */
+export function MedidorUso({ soloUso = false }: { soloUso?: boolean }) {
   const { data } = useMiPlan();
   if (!data) return null;
 
@@ -42,15 +46,15 @@ export function MedidorUso() {
           />
         )}
 
-        {data.estado === 'EN_GRACIA' && (
+        {!soloUso && data.estado === 'EN_GRACIA' && (
           <p className="text-xs text-amber-400">
-            No pudimos cobrar la renovación. Regularizá el pago para no perder
-            el plan.
+            No pudimos cobrar la renovación. Revisá tu medio de pago en Mercado
+            Pago para no perder el plan.
           </p>
         )}
       </div>
 
-      {data.plan !== 'PREMIUM' && (
+      {!soloUso && data.plan !== 'PREMIUM' && (
         <Link
           href="/planes"
           className="shrink-0 text-xs font-semibold text-sky-400 hover:text-sky-300"

@@ -33,10 +33,19 @@ const OPCIONES_TX = { timeout: 15_000, maxWait: 10_000 };
 
 const rango = (plan: Plan) => ORDEN_PLANES.indexOf(plan);
 
-/** Adónde vuelve el usuario después de pagar. Mercado Pago exige una URL https pública. */
-const urlRetorno = () =>
-  process.env.MP_BACK_URL ||
-  `${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/planes/resultado`;
+/**
+ * Adónde vuelve el usuario después de pagar, con el id de la suscripción para que
+ * la página de resultado sepa cuál consultar. Mercado Pago exige una URL https
+ * pública y conserva el query string.
+ */
+const urlRetorno = (idSuscripcion: number) => {
+  const url = new URL(
+    process.env.MP_BACK_URL ||
+      `${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/planes/resultado`,
+  );
+  url.searchParams.set('idSuscripcion', String(idSuscripcion));
+  return url.toString();
+};
 
 /** Un cobro nunca cuenta como hecho en el futuro: una fecha rara de la API no regala días. */
 const fechaDelCobro = (cobro: CobroMp, ahora = new Date()) =>
@@ -113,7 +122,7 @@ export class SuscripcionesService {
         // En el sandbox solo puede pagar la cuenta compradora de prueba.
         email: process.env.MP_PAYER_EMAIL_PRUEBA || usuario.email,
         monto: PRECIO_MENSUAL_ARS[plan],
-        urlRetorno: urlRetorno(),
+        urlRetorno: urlRetorno(id_suscripcion),
       });
       await this.prisma.suscripcion.update({
         where: { id_suscripcion },

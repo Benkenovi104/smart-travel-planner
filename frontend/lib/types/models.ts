@@ -235,10 +235,35 @@ export interface CatalogoPlanes {
   planes: {
     plan: Plan;
     nombre: string;
-    /** `null` mientras no esté definido. */
-    precioMensualArs: number | null;
+    /** En pesos: Mercado Pago Argentina solo cobra suscripciones en ARS. */
+    precioMensualArs: number;
     limites: LimitesPlan;
   }[];
   topeDiario: { itinerario: number; busquedas: number };
   diasDeGracia: number;
+}
+
+export type PlanPago = Exclude<Plan, 'GRATIS'>;
+
+/** Respuesta de `POST /planes/suscribir`: hay que mandar al usuario a `initPoint`. */
+export interface SuscripcionCreada {
+  idSuscripcion: number;
+  initPoint: string;
+}
+
+export interface CancelacionSuscripcion {
+  message: string;
+  /** Hasta cuándo conserva el plan. */
+  vigenteHasta: string | null;
+}
+
+/** Estado de una suscripción, para la página a la que vuelve después de pagar. */
+export interface EstadoPagoSuscripcion {
+  idSuscripcion: number;
+  plan: Plan;
+  nombrePlan: string;
+  estado: EstadoSuscripcion;
+  vigenteHasta: string | null;
+  /** El último cobro, con el estado que informa Mercado Pago (`approved`, `rejected`...). */
+  ultimoPago: { estado: string; fecha: string } | null;
 }

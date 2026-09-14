@@ -42,6 +42,7 @@ import {
   useQuitarInteres,
 } from '@/lib/query/use-usuario';
 import { CambiarPassword, EliminarCuenta } from '@/components/perfil/seguridad';
+import { MiPlanCard } from '@/components/planes/mi-plan-card';
 import { ApiError } from '@/lib/api/client';
 import type {
   PresupuestoPreferido,
@@ -94,6 +95,7 @@ export default function PerfilPage() {
         apellido={me?.apellido ?? ''}
         email={me?.email ?? ''}
       />
+      <MiPlanCard />
       <PerfilViajeroForm
         ritmo={me?.perfil?.ritmo ?? ''}
         presupuesto={me?.perfil?.presupuesto ?? ''}

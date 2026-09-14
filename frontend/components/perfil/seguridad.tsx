@@ -202,7 +202,11 @@ export function EliminarCuenta() {
         toast.error(
           e instanceof ApiError && e.status === 401
             ? 'La contraseña es incorrecta'
-            : 'No se pudo eliminar la cuenta',
+            : // 502: no se pudo cancelar la suscripción en Mercado Pago, así que
+              // la cuenta no se borró. El mensaje del backend lo explica.
+              e instanceof ApiError && e.status === 502
+              ? e.message
+              : 'No se pudo eliminar la cuenta',
         ),
     });
   }
@@ -216,6 +220,7 @@ export function EliminarCuenta() {
         </CardTitle>
         <CardDescription className="text-slate-400">
           Se borrará tu cuenta, tu perfil y todos tus viajes guardados de forma permanente.
+          Si tenés una suscripción paga, se cancela en Mercado Pago.
         </CardDescription>
       </CardHeader>
       <CardContent>

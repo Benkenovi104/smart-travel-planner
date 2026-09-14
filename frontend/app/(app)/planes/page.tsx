@@ -1,16 +1,24 @@
 'use client';
 
-import { Check, Crown, Minus } from 'lucide-react';
+import Link from 'next/link';
+import { toast } from 'sonner';
+import { Check, Crown, Loader2, Minus } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MedidorUso } from '@/components/planes/medidor-uso';
-import { useCatalogoPlanes, useMiPlan } from '@/lib/query/use-planes';
-import { formatMoney } from '@/lib/format';
+import {
+  useCatalogoPlanes,
+  useMiPlan,
+  useSuscribirPlan,
+} from '@/lib/query/use-planes';
+import { guardarSuscripcionEnCurso } from '@/lib/planes/checkout';
+import { ApiError } from '@/lib/api/client';
+import { formatFecha, formatMoney } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import type { LimitesPlan } from '@/lib/types/models';
+import type { LimitesPlan, MiPlan, Plan, PlanPago } from '@/lib/types/models';
 
 /** `true` = incluido sin límite, `false` = no incluido, texto = con límite. */
 type Valor = boolean | string;
@@ -49,9 +57,106 @@ function Celda({ valor }: { valor: Valor }) {
   return <span className="text-sm font-medium">{valor}</span>;
 }
 
+/**
+ * El botón de cada plan. Solo orienta: si el backend no permite la suscripción
+ * (por ejemplo, bajar mientras se cobra un plan mayor), responde con el motivo.
+ */
+function AccionPlan({
+  plan,
+  nombre,
+  indice,
+  indiceActual,
+  miPlan,
+  ocupado,
+  yendo,
+  onSuscribir,
+}: {
+  plan: Plan;
+  nombre: string;
+  indice: number;
+  indiceActual: number;
+  miPlan: MiPlan;
+  ocupado: boolean;
+  yendo: boolean;
+  onSuscribir: (plan: PlanPago) => void;
+}) {
+  if (plan === 'GRATIS') return null;
+
+  const cancelada = miPlan.estado === 'CANCELADA';
+  const esElActual = indice === indiceActual;
+  if (esElActual && !cancelada) return null;
+
+  // Un plan pago que Mercado Pago sigue cobrando: para bajar, primero se cancela.
+  const cobrandoOtro =
+    miPlan.plan !== 'GRATIS' && miPlan.vigenteHasta !== null && !cancelada;
+  if (indice < indiceActual && cobrandoOtro) {
+    return (
+      <div className="mt-auto space-y-2">
+        <Button className="w-full" variant="outline" disabled>
+          Primero cancelá tu plan
+        </Button>
+        <p className="text-xs text-muted-foreground">
+          Cancelalo desde{' '}
+          <Link href="/perfil#mi-plan" className="underline hover:text-white">
+            tu perfil
+          </Link>
+          : lo conservás hasta el {formatFecha(miPlan.vigenteHasta)}.
+        </p>
+      </div>
+    );
+  }
+
+  const texto = esElActual
+    ? 'Volver a suscribirme'
+    : miPlan.plan === 'GRATIS' || cancelada
+      ? 'Suscribirme'
+      : `Pasar a ${nombre}`;
+
+  return (
+    <Button
+      className="mt-auto w-full"
+      disabled={ocupado}
+      onClick={() => onSuscribir(plan)}
+    >
+      {yendo ? (
+        <>
+          <Loader2 className="size-4 animate-spin" />
+          Yendo a Mercado Pago…
+        </>
+      ) : (
+        texto
+      )}
+    </Button>
+  );
+}
+
 export default function PlanesPage() {
   const catalogo = useCatalogoPlanes();
   const { data: miPlan } = useMiPlan();
+  const suscribir = useSuscribirPlan();
+
+  function onSuscribir(plan: PlanPago) {
+    suscribir.mutate(plan, {
+      onSuccess: ({ idSuscripcion, initPoint }) => {
+        guardarSuscripcionEnCurso(idSuscripcion);
+        // El pago se hace en Mercado Pago, que después vuelve a /planes/resultado.
+        window.location.href = initPoint;
+      },
+      onError: (e) =>
+        toast.error(
+          e instanceof ApiError
+            ? e.message
+            : 'No pudimos iniciar el pago. Probá de nuevo.',
+        ),
+    });
+  }
+
+  // Después del éxito sigue ocupado: la página se está yendo a Mercado Pago.
+  const ocupado = suscribir.isPending || suscribir.isSuccess;
+  const indiceActual =
+    miPlan && catalogo.data
+      ? catalogo.data.planes.findIndex((p) => p.plan === miPlan.plan)
+      : -1;
 
   return (
     <div className="space-y-8">
@@ -86,7 +191,7 @@ export default function PlanesPage() {
       {catalogo.data && (
         <>
           <div className="grid gap-6 sm:grid-cols-3">
-            {catalogo.data.planes.map((p) => {
+            {catalogo.data.planes.map((p, indice) => {
               const actual = miPlan?.plan === p.plan;
               return (
                 <Card
@@ -107,9 +212,7 @@ export default function PlanesPage() {
                       {/* El nombre ya dice "Gratis": repetirlo como precio se lee raro. */}
                       {p.precioMensualArs === 0
                         ? '$ 0 / mes'
-                        : p.precioMensualArs === null
-                          ? 'Precio a definir'
-                          : `${formatMoney(p.precioMensualArs)} / mes`}
+                        : `${formatMoney(p.precioMensualArs)} / mes`}
                     </p>
                   </CardHeader>
                   <CardContent className="flex flex-1 flex-col gap-4">
@@ -126,10 +229,17 @@ export default function PlanesPage() {
                         </li>
                       ))}
                     </ul>
-                    {!actual && p.plan !== 'GRATIS' && (
-                      <Button className="mt-auto w-full" disabled>
-                        Próximamente
-                      </Button>
+                    {miPlan && (
+                      <AccionPlan
+                        plan={p.plan}
+                        nombre={p.nombre}
+                        indice={indice}
+                        indiceActual={indiceActual}
+                        miPlan={miPlan}
+                        ocupado={ocupado}
+                        yendo={ocupado && suscribir.variables === p.plan}
+                        onSuscribir={onSuscribir}
+                      />
                     )}
                   </CardContent>
                 </Card>
@@ -138,8 +248,10 @@ export default function PlanesPage() {
           </div>
 
           <p className="text-xs text-slate-500">
-            Los planes pagos se van a poder contratar con Mercado Pago. Además,
-            todos los planes tienen un tope de seguridad de{' '}
+            Los planes pagos se cobran todos los meses con Mercado Pago, en
+            pesos, desde el día en que pagás. Podés cancelar cuando quieras desde
+            tu perfil y conservás el plan hasta el fin del período pagado. Todos
+            los planes tienen además un tope de seguridad de{' '}
             {catalogo.data.topeDiario.itinerario} generaciones de itinerario y{' '}
             {catalogo.data.topeDiario.busquedas} búsquedas por día.
           </p>

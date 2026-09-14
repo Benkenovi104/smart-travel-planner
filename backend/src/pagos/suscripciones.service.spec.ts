@@ -187,7 +187,7 @@ describe('SuscripcionesService', () => {
         motivo: 'Smart Travel Planner — Plan Base',
         email: 'viajera@mail.com',
         monto: 12_500,
-        urlRetorno: 'http://localhost:3001/planes/resultado',
+        urlRetorno: 'http://localhost:3001/planes/resultado?idSuscripcion=1',
       });
       expect(prisma.suscripcion.update).toHaveBeenCalledWith({
         where: { id_suscripcion: 1 },
@@ -208,7 +208,8 @@ describe('SuscripcionesService', () => {
       expect(mp.crearSuscripcion).toHaveBeenCalledWith(
         expect.objectContaining({
           email: 'test_user_1@testuser.com',
-          urlRetorno: 'https://tunel.ngrok-free.dev/api/pagos/volver',
+          urlRetorno:
+            'https://tunel.ngrok-free.dev/api/pagos/volver?idSuscripcion=1',
           monto: 38_500,
         }),
       );

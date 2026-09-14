@@ -20,5 +20,7 @@ export const qk = {
   miPlanTodos: ['planes', 'mi-plan'] as const,
   miPlan: (idViaje?: number) =>
     ['planes', 'mi-plan', idViaje ?? 'general'] as const,
+  suscripcion: (idSuscripcion: number) =>
+    ['planes', 'suscripcion', idSuscripcion] as const,
 };
 
