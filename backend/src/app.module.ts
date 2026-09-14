@@ -14,6 +14,7 @@ import { LugaresModule } from './lugares/lugares.module.js';
 import { VuelosModule } from './vuelos/vuelos.module.js';
 import { AlojamientoModule } from './alojamiento/alojamiento.module.js';
 import { PerfilModule } from './perfil/perfil.module.js';
+import { PlanesModule } from './planes/planes.module.js';
 import { validate } from './config/env.validation.js';
 
 @Module({
@@ -30,6 +31,7 @@ import { validate } from './config/env.validation.js';
     LugaresModule,
     VuelosModule,
     AlojamientoModule,
+    PlanesModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],

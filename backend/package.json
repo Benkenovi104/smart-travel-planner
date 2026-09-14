@@ -15,6 +15,7 @@
     "start:prod": "node dist/src/main",
     "prisma:generate": "prisma generate",
     "seed": "npx tsx prisma/seed.ts",
+    "plan:asignar": "npx tsx prisma/asignar-plan.ts",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "set NODE_OPTIONS=--experimental-vm-modules && jest",
     "test:watch": "jest --watch",
