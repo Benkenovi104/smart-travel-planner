@@ -2,7 +2,7 @@
  * Asigna un plan a mano, sin pasar por Mercado Pago. Sirve para desarrollar,
  * probar y hacer demos de cada plan, y para dar planes de cortesía.
  *
- *   npm run plan:asignar -- <email> <GRATIS|MEDIO|ILIMITADO>
+ *   npm run plan:asignar -- <email> <GRATIS|BASE|PREMIUM>
  *
  * El plan asignado no vence (`vigente_hasta` queda en null). Pasar a GRATIS da de
  * baja las suscripciones asignadas a mano.
@@ -29,7 +29,7 @@ async function main() {
 
   if (!email || !PLANES.includes(plan)) {
     console.error(
-      'Uso: npm run plan:asignar -- <email> <GRATIS|MEDIO|ILIMITADO>',
+      'Uso: npm run plan:asignar -- <email> <GRATIS|BASE|PREMIUM>',
     );
     process.exitCode = 1;
     return;

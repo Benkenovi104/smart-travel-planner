@@ -105,7 +105,7 @@ describe('AlojamientoService', () => {
     booking.buscarHoteles.mockResolvedValue([
       { nombre: 'Caro', precioTotal: 600, rating: 9, latitud: null, longitud: null }, // 200/noche
       { nombre: 'Barato', precioTotal: 150, rating: 8, latitud: null, longitud: null }, // 50/noche
-      { nombre: 'Medio', precioTotal: 300, rating: 7, latitud: null, longitud: null }, // 100/noche
+      { nombre: 'Base', precioTotal: 300, rating: 7, latitud: null, longitud: null }, // 100/noche
     ]);
     prisma.opcionAlojamiento.findMany.mockResolvedValue([]);
 
@@ -363,7 +363,7 @@ describe('AlojamientoService', () => {
           message: 'Tu plan Gratis incluye 1 búsqueda de alojamiento por viaje.',
           accion: 'BUSCAR_ALOJAMIENTO',
           planActual: 'GRATIS',
-          planSugerido: 'MEDIO',
+          planSugerido: 'BASE',
           limite: 1,
           usado: 1,
           renuevaEl: null,

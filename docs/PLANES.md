@@ -2,7 +2,7 @@
 
 > **Estado: en construcción.** Este documento define cómo funciona el sistema de planes.
 
-Smart Travel Planner ofrece tres planes: **Gratis**, **Medio** e **Ilimitado**. Los dos
+Smart Travel Planner ofrece tres planes: **Gratis**, **Base** y **Premium**. Los dos
 pagos se cobran con una suscripción mensual de **Mercado Pago** que se renueva sola.
 
 ## Por qué los límites son los que son
@@ -20,21 +20,21 @@ cada viaje, porque pega contra servicios externos que se pagan o tienen cuota:
 Por eso los planes limitan **dos cosas**: cuántos viajes se crean por período, y cuántas
 veces se repiten las acciones caras dentro de cada viaje. Limitar solo los viajes no
 alcanza: un usuario gratis que regenera 40 veces su único itinerario cuesta más que uno
-del plan Medio con cinco viajes.
+del plan Base con cinco viajes.
 
 La idea de cada plan:
 
 - **Gratis** deja probar lo mejor de la app **una vez**: un viaje con su itinerario hecho por
   IA. Lo que no puede es repetir ni usar lo avanzado. Si el plan gratis no mostrara el
   itinerario generado, nadie entendería por qué pagar.
-- **Medio** agrega la optimización de recorridos y la búsqueda de vuelos, con límites.
-- **Ilimitado** tiene acceso a todo.
+- **Base** agrega la optimización de recorridos y la búsqueda de vuelos, con límites.
+- **Premium** tiene acceso a todo.
 
 ## Los tres planes
 
-| | Gratis | Medio | Ilimitado |
+| | Gratis | Base | Premium |
 |---|---|---|---|
-| **Precio mensual** | $0 | *a definir (ARS)* | *a definir (ARS)* |
+| **Precio mensual** | $ 0 | $ 12.500 (≈ US$ 8) | $ 38.500 (≈ US$ 25) |
 | **Viajes por período** | 1 | 5 | Sin límite |
 | **Generar itinerario con IA** | 1 vez por viaje | ✓ | ✓ |
 | **Regenerar itinerario** | ✗ | 3 por viaje | Sin límite |
@@ -46,16 +46,20 @@ La idea de cada plan:
 Los números viven en un único archivo de configuración del backend, así que ajustarlos no
 requiere tocar la lógica. El frontend nunca los tiene escritos: los pide al backend.
 
+**Los precios se cobran en pesos** porque Mercado Pago Argentina no acepta suscripciones en
+otra moneda. Equivalen a US$ 8 y US$ 25 al dólar MEP del 14/09/2026 y hay que revisarlos cada
+tanto por la inflación.
+
 ## Dos tipos de límite
 
 **Por período** — solo los viajes. Se reinicia cada vez que empieza un período nuevo.
 
 **Por viaje** — generar, regenerar, buscar alojamiento y buscar vuelos. Se cuentan sobre
-ese viaje en particular y **no se reinician** con el período: un viaje del plan Medio tiene
+ese viaje en particular y **no se reinician** con el período: un viaje del plan Base tiene
 3 búsquedas de alojamiento en toda su vida, no 3 por mes.
 
 Los límites se evalúan contra el plan **vigente al momento de la acción**. Si un usuario
-pasa de Medio a Ilimitado, sus viajes existentes pasan a tener los límites de Ilimitado.
+pasa de Base a Premium, sus viajes existentes pasan a tener los límites de Premium.
 
 ## El período
 
@@ -93,8 +97,8 @@ El período dura un mes y se cuenta **desde el día en que empezó el plan**, no
 
 | Situación | Qué pasa |
 |---|---|
-| **Subir de plan** (Gratis → Medio, Medio → Ilimitado) | Aplica al instante. Empieza un período nuevo desde la fecha del pago. Los días que quedaban del plan anterior **no se reintegran ni se prorratean**. |
-| **Bajar de plan** (Ilimitado → Medio) | Se cancela el plan actual, que sigue vigente hasta el fin del período ya pagado. Después, el usuario se suscribe al plan menor. |
+| **Subir de plan** (Gratis → Base, Base → Premium) | Aplica al instante. Empieza un período nuevo desde la fecha del pago. Los días que quedaban del plan anterior **no se reintegran ni se prorratean**. |
+| **Bajar de plan** (Premium → Base) | Se cancela el plan actual, que sigue vigente hasta el fin del período ya pagado. Después, el usuario se suscribe al plan menor. |
 | **Cancelar** | Se conservan los beneficios hasta el fin del período pagado. Después pasa a Gratis. |
 | **Falla el cobro de la renovación** | **3 días de gracia** con el plan activo y un aviso. Si no se regulariza, pasa a Gratis. Mercado Pago reintenta el cobro por su cuenta: si un reintento se aprueba más tarde, **el plan vuelve a activarse solo**, aunque ya hubiera pasado a Gratis. |
 
@@ -116,12 +120,12 @@ actuales:
 | Sky Scrapper (vuelos) | 20 requests | 4 | **5** |
 | Booking (alojamiento) | 50 requests | 2 | **25** |
 
-Un solo usuario Medio con cinco viajes agota la cuota de vuelos de todos en un mes. **Antes
+Un solo usuario Base con cinco viajes agota la cuota de vuelos de todos en un mes. **Antes
 de abrir los planes pagos al público hay que pasar esas dos APIs a un plan pago.** Hasta
 entonces, el sistema funciona pero "sin límite" es una promesa que la infraestructura no
 puede cumplir.
 
-**Protección contra abuso.** Todos los planes, incluido Ilimitado, tienen además un tope
+**Protección contra abuso.** Todos los planes, incluido Premium, tienen además un tope
 técnico **por usuario, en las últimas 24 horas**:
 
 | Acción | Tope diario |
@@ -162,8 +166,6 @@ Pago, y cada período nuevo se habilita recién cuando llega la confirmación de
 
 ## Decisiones pendientes
 
-- **Precios** de Medio e Ilimitado, en pesos. Hacen falta recién al integrar el cobro con
-  Mercado Pago.
 - **Pasar Sky Scrapper y Booking a planes pagos** de RapidAPI antes de lanzar (ver arriba).
 - Si más adelante se quiere **prorratear** los cambios de plan en vez de empezar un período
   nuevo.

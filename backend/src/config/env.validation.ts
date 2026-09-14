@@ -1,5 +1,6 @@
 import { plainToInstance } from 'class-transformer';
 import {
+  IsEmail,
   IsIn,
   IsOptional,
   IsString,
@@ -60,6 +61,26 @@ class EnvironmentVariables {
   @IsOptional()
   @IsUrl({ require_tld: false })
   FRONTEND_URL?: string;
+
+  // Mercado Pago. Opcionales, como SMTP: el server arranca sin ellas y los pagos
+  // responden 503 hasta configurarlas.
+  @IsOptional()
+  @IsString()
+  MP_ACCESS_TOKEN?: string;
+
+  @IsOptional()
+  @IsString()
+  MP_WEBHOOK_SECRET?: string;
+
+  // Adónde vuelve el usuario después de pagar: Mercado Pago rechaza lo que no sea https.
+  @IsOptional()
+  @IsUrl({ protocols: ['https'], require_protocol: true, require_tld: false })
+  MP_BACK_URL?: string;
+
+  // Solo en pruebas: la cuenta compradora de prueba, la única que puede pagar en el sandbox.
+  @IsOptional()
+  @IsEmail()
+  MP_PAYER_EMAIL_PRUEBA?: string;
 
   @IsOptional()
   @IsIn(['development', 'production', 'test'])

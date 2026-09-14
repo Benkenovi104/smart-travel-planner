@@ -57,8 +57,8 @@ enum NecesidadMovilidad {
 // falta una fila para eso (ver docs/PLANES.md).
 enum Plan {
   GRATIS
-  MEDIO
-  ILIMITADO
+  BASE
+  PREMIUM
 }
 
 enum EstadoSuscripcion {

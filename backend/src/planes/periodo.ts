@@ -59,3 +59,28 @@ export function periodoVigente(ancla: Date, ahora: Date): Periodo {
     hasta: sumarMesesAnclado(ancla, n + 1),
   };
 }
+
+/**
+ * El período que habilita un cobro aprobado de una suscripción.
+ *
+ * - **Primer cobro** (`vigenteHasta` null): arranca el día del cobro, que pasa a
+ *   ser el ancla. Pagó el 13/08 → hasta el 13/09.
+ * - **Renovación**: sigue desde donde terminaba lo pagado, aunque el cobro llegue
+ *   unos días antes o durante la gracia.
+ * - **Cobro muy atrasado** (Mercado Pago reintentó durante semanas y ese período ya
+ *   terminó): habilita el período que contiene al cobro. El usuario no paga por
+ *   días que ya pasaron sin plan.
+ */
+export function periodoPagado(
+  ancla: Date,
+  vigenteHasta: Date | null,
+  fechaCobro: Date,
+): Periodo {
+  if (vigenteHasta === null) {
+    return { desde: fechaCobro, hasta: sumarMesesAnclado(fechaCobro, 1) };
+  }
+  const siguiente = periodoVigente(ancla, vigenteHasta);
+  return siguiente.hasta.getTime() > fechaCobro.getTime()
+    ? siguiente
+    : periodoVigente(ancla, fechaCobro);
+}

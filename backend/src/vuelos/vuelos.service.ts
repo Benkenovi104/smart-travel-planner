@@ -129,7 +129,7 @@ export class VuelosService {
         if (opciones.length > 0) {
           await tx.opcionVuelo.createMany({ data: opciones });
           // Solo cuenta si trajo vuelos: una búsqueda vacía no le dio nada al
-          // usuario, y en el plan Medio es su única búsqueda del viaje.
+          // usuario, y en el plan Base es su única búsqueda del viaje.
           await this.planes.registrar(
             id_usuario,
             TipoConsumo.BUSCAR_VUELOS,

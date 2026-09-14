@@ -45,6 +45,9 @@ describe('Flujo principal (e2e)', () => {
     prisma = moduleFixture.get(PrismaService);
   });
 
+  // Timeout propio: borrar la cuenta cancela antes la suscripción y después borra
+  // en cascada el viaje con itinerario, y eso supera los 5 s que Jest da por
+  // defecto a un hook. Si se corta, app.close() no llega a correr.
   afterAll(async () => {
     // Cleanup: borrar la cuenta (cascade) si quedó creada.
     if (token) {
@@ -55,7 +58,7 @@ describe('Flujo principal (e2e)', () => {
         .catch(() => undefined);
     }
     await app.close();
-  });
+  }, 60_000);
 
   it('registro -> devuelve JWT', async () => {
     const res = await request(http)
@@ -110,18 +113,14 @@ describe('Flujo principal (e2e)', () => {
     expect(res.body).toMatchObject({ codigo: 'BORRADOR_EXISTENTE', idViaje });
   });
 
-  it(
-    'generar itinerario con IA (Gemini real) -> 201 con días',
-    async () => {
-      const res = await request(http)
-        .post(`/api/viajes/${idViaje}/itinerario/generar`)
-        .set('Authorization', `Bearer ${token}`)
-        .expect(201);
-      expect(Array.isArray(res.body.dias_itinerario)).toBe(true);
-      expect(res.body.dias_itinerario.length).toBeGreaterThan(0);
-    },
-    120_000,
-  );
+  it('generar itinerario con IA (Gemini real) -> 201 con días', async () => {
+    const res = await request(http)
+      .post(`/api/viajes/${idViaje}/itinerario/generar`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(201);
+    expect(Array.isArray(res.body.dias_itinerario)).toBe(true);
+    expect(res.body.dias_itinerario.length).toBeGreaterThan(0);
+  }, 120_000);
 
   it('ver presupuesto (derivado del itinerario) -> 200', async () => {
     const res = await request(http)
@@ -147,11 +146,11 @@ describe('Flujo principal (e2e)', () => {
     expect(res.body).toMatchObject({
       codigo: 'LIMITE_PLAN',
       planActual: 'GRATIS',
-      planSugerido: 'MEDIO',
+      planSugerido: 'BASE',
     });
   });
 
-  it('con plan Ilimitado asignado, mi-plan lo refleja', async () => {
+  it('con plan Premium asignado, mi-plan lo refleja', async () => {
     const usuario = await prisma.usuario.findUniqueOrThrow({
       where: { email },
     });
@@ -159,7 +158,7 @@ describe('Flujo principal (e2e)', () => {
     await prisma.suscripcion.create({
       data: {
         id_usuario: usuario.id_usuario,
-        plan: 'ILIMITADO',
+        plan: 'PREMIUM',
         estado: 'ACTIVA',
         dia_ancla: ahora,
         vigente_desde: ahora,
@@ -170,7 +169,48 @@ describe('Flujo principal (e2e)', () => {
       .get('/api/planes/mi-plan')
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
-    expect(res.body.plan).toBe('ILIMITADO');
+    expect(res.body.plan).toBe('PREMIUM');
+  });
+
+  // Los endpoints de pagos que no llegan a llamar a Mercado Pago.
+  it('pagos: suscribirse al plan Gratis no es válido (400)', async () => {
+    await request(http)
+      .post('/api/planes/suscribir')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ plan: 'GRATIS' })
+      .expect(400);
+  });
+
+  it('pagos: con un plan asignado a mano no hay suscripción que cancelar (404)', async () => {
+    await request(http)
+      .post('/api/planes/cancelar')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(404);
+  });
+
+  it('pagos: no muestra una suscripción que no es del usuario (404)', async () => {
+    await request(http)
+      .get('/api/planes/suscripciones/999999999')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(404);
+  });
+
+  it('pagos: el webhook rechaza una notificación con firma inválida (401)', async () => {
+    await request(http)
+      .post('/api/pagos/webhook?data.id=123&type=subscription_preapproval')
+      .set('x-signature', 'ts=1789437600,v1=firma-falsa')
+      .set('x-request-id', 'e2e')
+      .send({ type: 'subscription_preapproval', data: { id: '123' } })
+      .expect(401);
+  });
+
+  it('pagos: la vuelta del checkout redirige al frontend', async () => {
+    const res = await request(http)
+      .get('/api/pagos/volver?preapproval_id=abc')
+      .expect(302);
+    expect(res.headers.location).toMatch(
+      /\/planes\/resultado\?preapproval_id=abc$/,
+    );
   });
 
   it('buscar vuelos (mock) -> guarda opciones ordenadas por precio', async () => {
@@ -188,18 +228,14 @@ describe('Flujo principal (e2e)', () => {
   // Gemini real y cada hotel se enriquece con Google Places real. Con los 5 s por
   // defecto, Jest abandona el test mientras el request sigue corriendo, y ese
   // request después choca con el borrado de la cuenta del afterAll (deadlock).
-  it(
-    'buscar alojamiento (mock) -> guarda opciones ordenadas por precio/noche',
-    async () => {
-      const res = await request(http)
-        .post(`/api/viajes/${idViaje}/alojamiento/buscar`)
-        .set('Authorization', `Bearer ${token}`)
-        .expect(201);
-      expect(Array.isArray(res.body)).toBe(true);
-      expect(res.body.length).toBeGreaterThan(0);
-    },
-    120_000,
-  );
+  it('buscar alojamiento (mock) -> guarda opciones ordenadas por precio/noche', async () => {
+    const res = await request(http)
+      .post(`/api/viajes/${idViaje}/alojamiento/buscar`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(201);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body.length).toBeGreaterThan(0);
+  }, 120_000);
 
   it('IDOR: otro usuario no puede ver este viaje (403)', async () => {
     const otro = `e2e_otro_${Date.now()}@test.com`;

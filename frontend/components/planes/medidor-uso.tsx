@@ -50,7 +50,7 @@ export function MedidorUso() {
         )}
       </div>
 
-      {data.plan !== 'ILIMITADO' && (
+      {data.plan !== 'PREMIUM' && (
         <Link
           href="/planes"
           className="shrink-0 text-xs font-semibold text-sky-400 hover:text-sky-300"

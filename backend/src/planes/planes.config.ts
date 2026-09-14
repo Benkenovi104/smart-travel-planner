@@ -26,7 +26,7 @@ export const LIMITES: Record<Plan, LimitesPlan> = {
     alojamientoPorViaje: 1,
     vuelosPorViaje: 0,
   },
-  MEDIO: {
+  BASE: {
     viajesPorPeriodo: 5,
     generarPorViaje: null,
     regenerarPorViaje: 3,
@@ -34,7 +34,7 @@ export const LIMITES: Record<Plan, LimitesPlan> = {
     alojamientoPorViaje: 3,
     vuelosPorViaje: 1,
   },
-  ILIMITADO: {
+  PREMIUM: {
     viajesPorPeriodo: null,
     generarPorViaje: null,
     regenerarPorViaje: null,
@@ -48,24 +48,28 @@ export const LIMITES: Record<Plan, LimitesPlan> = {
 /** De menor a mayor. Define cuál es el plan siguiente a sugerir. */
 export const ORDEN_PLANES: readonly Plan[] = [
   Plan.GRATIS,
-  Plan.MEDIO,
-  Plan.ILIMITADO,
+  Plan.BASE,
+  Plan.PREMIUM,
 ];
 
 export const NOMBRE_PLAN: Record<Plan, string> = {
   GRATIS: 'Gratis',
-  MEDIO: 'Medio',
-  ILIMITADO: 'Ilimitado',
+  BASE: 'Base',
+  PREMIUM: 'Premium',
 };
 
 /**
- * Precio mensual en pesos. `null` mientras no estén definidos: recién hacen falta
- * al crear la suscripción en Mercado Pago.
+ * Precio mensual en pesos. Mercado Pago Argentina solo cobra suscripciones en ARS
+ * (con `currency_id: 'USD'` responde "Invalid field -> auto_recurring.currency_id"),
+ * así que los precios, pensados en dólares, se fijan en pesos: US$ 8 y US$ 25 al
+ * dólar MEP del 14/09/2026 ($ 1.539,90), redondeados. Hay que revisarlos cada tanto
+ * por la inflación: Mercado Pago permite actualizar el monto de las suscripciones
+ * que ya existen.
  */
-export const PRECIO_MENSUAL_ARS: Record<Plan, number | null> = {
+export const PRECIO_MENSUAL_ARS: Record<Plan, number> = {
   GRATIS: 0,
-  MEDIO: null,
-  ILIMITADO: null,
+  BASE: 12_500,
+  PREMIUM: 38_500,
 };
 
 /** Días que un plan pago sigue activo cuando el cobro de la renovación no llega. */

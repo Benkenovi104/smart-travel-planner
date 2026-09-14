@@ -1,5 +1,5 @@
 import { describe, it, expect } from '@jest/globals';
-import { periodoVigente, sumarMesesAnclado } from './periodo.js';
+import { periodoPagado, periodoVigente, sumarMesesAnclado } from './periodo.js';
 
 /** Fecha UTC con el mes en base 1, para que los tests se lean como calendario. */
 const utc = (anio: number, mes: number, dia: number, hora = 0, minuto = 0) =>
@@ -87,6 +87,45 @@ describe('periodo', () => {
         desde: utc(2026, 8, 31),
         hasta: utc(2026, 9, 30),
       });
+    });
+  });
+
+  describe('periodoPagado', () => {
+    it('el primer cobro arranca el período el día del pago', () => {
+      expect(
+        periodoPagado(utc(2026, 8, 1), null, utc(2026, 8, 13, 15)),
+      ).toEqual({
+        desde: utc(2026, 8, 13, 15),
+        hasta: utc(2026, 9, 13, 15),
+      });
+    });
+
+    it('una renovación sigue desde donde terminaba lo pagado', () => {
+      expect(
+        periodoPagado(utc(2026, 8, 13), utc(2026, 9, 13), utc(2026, 9, 13)),
+      ).toEqual({ desde: utc(2026, 9, 13), hasta: utc(2026, 10, 13) });
+    });
+
+    it('cobrada un día antes o durante la gracia, extiende lo mismo', () => {
+      const esperado = { desde: utc(2026, 9, 13), hasta: utc(2026, 10, 13) };
+      expect(
+        periodoPagado(utc(2026, 8, 13), utc(2026, 9, 13), utc(2026, 9, 12)),
+      ).toEqual(esperado);
+      expect(
+        periodoPagado(utc(2026, 8, 13), utc(2026, 9, 13), utc(2026, 9, 15)),
+      ).toEqual(esperado);
+    });
+
+    it('un cobro muy atrasado habilita el período que lo contiene, no uno ya pasado', () => {
+      expect(
+        periodoPagado(utc(2026, 8, 13), utc(2026, 9, 13), utc(2026, 10, 20)),
+      ).toEqual({ desde: utc(2026, 10, 13), hasta: utc(2026, 11, 13) });
+    });
+
+    it('al renovar respeta el ancla de fin de mes', () => {
+      expect(
+        periodoPagado(utc(2026, 1, 31), utc(2026, 2, 28), utc(2026, 2, 28)),
+      ).toEqual({ desde: utc(2026, 2, 28), hasta: utc(2026, 3, 31) });
     });
   });
 });

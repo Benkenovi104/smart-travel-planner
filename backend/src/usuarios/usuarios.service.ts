@@ -7,6 +7,7 @@ import {
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { ViajesService } from '../viajes/viajes.service.js';
+import { SuscripcionesService } from '../pagos/suscripciones.service.js';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto.js';
 import { UpsertPerfilDto } from './dto/upsert-perfil.dto.js';
 import { AddInteresDto } from './dto/add-interes.dto.js';
@@ -55,7 +56,10 @@ const USUARIO_SELECT = {
 
 @Injectable()
 export class UsuariosService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly suscripciones: SuscripcionesService,
+  ) {}
 
   async getMe(id_usuario: number) {
     const usuario = await this.prisma.usuario.findUnique({
@@ -171,20 +175,9 @@ export class UsuariosService {
     if (!passwordOk) throw new UnauthorizedException('Contraseña incorrecta');
 
     // Mercado Pago sigue cobrando una suscripción aunque se borre la cuenta, y
-    // después ya no habría forma de cancelarla desde la app.
-    const suscripcionCobrada = await this.prisma.suscripcion.findFirst({
-      where: {
-        id_usuario,
-        mp_preapproval_id: { not: null },
-        estado: { in: ['ACTIVA', 'EN_GRACIA'] },
-      },
-      select: { id_suscripcion: true },
-    });
-    if (suscripcionCobrada) {
-      throw new ConflictException(
-        'Tenés una suscripción paga activa. Cancelala antes de eliminar la cuenta.',
-      );
-    }
+    // después ya no habría forma de cancelarla desde la app: se cancela antes de
+    // borrar. Si Mercado Pago falla, el error sube y la cuenta no se borra.
+    await this.suscripciones.cancelarTodas(id_usuario);
 
     // Cascade manual completo (el schema usa onDelete: NoAction): primero los
     // viajes con todos sus hijos, después perfil e intereses, y al final el

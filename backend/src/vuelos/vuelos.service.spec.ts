@@ -218,7 +218,7 @@ describe('VuelosService', () => {
           message: 'Buscar vuelos no está incluido en el plan Gratis.',
           accion: 'BUSCAR_VUELOS',
           planActual: 'GRATIS',
-          planSugerido: 'MEDIO',
+          planSugerido: 'BASE',
           limite: 0,
           usado: 0,
           renuevaEl: null,

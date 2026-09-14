@@ -183,7 +183,7 @@ export interface OpcionAlojamiento {
 
 // ---------- Planes de uso ----------
 
-export type Plan = 'GRATIS' | 'MEDIO' | 'ILIMITADO';
+export type Plan = 'GRATIS' | 'BASE' | 'PREMIUM';
 
 export type EstadoSuscripcion =
   | 'PENDIENTE'

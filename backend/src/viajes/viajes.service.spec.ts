@@ -121,7 +121,7 @@ describe('ViajesService', () => {
           message: 'Tu plan Gratis incluye 1 viaje por período.',
           accion: 'CREAR_VIAJE',
           planActual: 'GRATIS',
-          planSugerido: 'MEDIO',
+          planSugerido: 'BASE',
           limite: 1,
           usado: 1,
           renuevaEl: null,

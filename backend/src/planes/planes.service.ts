@@ -110,7 +110,13 @@ export class PlanesService {
         if (!elegida || this.rango(s.plan) > this.rango(elegida.s.plan)) {
           elegida = { s, estado: this.estadoEfectivo(s, ahora) };
         }
-      } else if (fin !== null && fin.getTime() <= ahora.getTime()) {
+      } else if (
+        // Una que nunca se pagó (un checkout abandonado y dado de baja) no fue un
+        // plan: no corre el período de Gratis.
+        s.vigente_desde !== null &&
+        fin !== null &&
+        fin.getTime() <= ahora.getTime()
+      ) {
         if (!finUltimoPlanPago || fin.getTime() > finUltimoPlanPago.getTime()) {
           finUltimoPlanPago = fin;
         }

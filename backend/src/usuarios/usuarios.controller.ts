@@ -82,6 +82,11 @@ export class UsuariosController {
   })
   @ApiResponse({ status: 200, description: 'Cuenta eliminada.' })
   @ApiResponse({ status: 401, description: 'Contraseña incorrecta.' })
+  @ApiResponse({
+    status: 502,
+    description:
+      'No se pudo cancelar la suscripción en Mercado Pago: la cuenta no se borró.',
+  })
   deleteMe(@Request() req, @Body() dto: DeleteAccountDto) {
     return this.usuariosService.deleteMe(req.user.id_usuario, dto.password);
   }

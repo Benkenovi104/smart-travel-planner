@@ -60,7 +60,7 @@ Un usuario con intereses generales en gastronomía y cultura puede priorizar nie
 | Edición del viaje | ✅ | Cambiar fechas, personas, presupuesto, intereses y estado; el presupuesto se recalcula solo |
 | Guardado de viajes | ✅ | Acceso futuro y reutilización de preferencias |
 | Optimización de rutas | ✅ | Botón "Optimizar" por día: reordena las paradas por cercanía (nearest-neighbor + 2-opt) y corre los horarios a la nueva secuencia |
-| Planes de uso | 🚧 En construcción | Planes Gratis, Medio e Ilimitado con suscripción mensual vía Mercado Pago — ver [Planes de Uso](#planes-de-uso) |
+| Planes de uso | 🚧 En construcción | Planes Gratis, Base y Premium con suscripción mensual vía Mercado Pago — ver [Planes de Uso](#planes-de-uso) |
 
 > **Nota:** Las integraciones de vuelos y alojamiento son informativas: la app muestra opciones y precios, pero no gestiona reservas reales. Lo que **sí** se cobra de verdad son los planes de uso, vía Mercado Pago.
 
@@ -70,7 +70,7 @@ Un usuario con intereses generales en gastronomía y cultura puede priorizar nie
 
 La app va a ofrecer tres planes. Los límites apuntan a lo que le cuesta a la app cada acción: crear un viaje es gratis, pero generar un itinerario o buscar vuelos y alojamiento consume servicios externos pagos o con cuota.
 
-| | Gratis | Medio | Ilimitado |
+| | Gratis | Base | Premium |
 |---|---|---|---|
 | Viajes por período | 1 | 5 | Sin límite |
 | Generar itinerario con IA | 1 vez por viaje | ✓ | ✓ |
@@ -220,7 +220,7 @@ Arranca en `http://localhost:3001`. Necesita el backend corriendo.
 | `npm run start:dev` | Servidor en modo desarrollo (watch) |
 | `npm run start:prod` | Servidor en modo producción (requiere `npm run build`) |
 | `npm run seed` | Carga el catálogo de intereses (idempotente) |
-| `npm run test` | Tests unitarios (12 suites, 102 tests) |
+| `npm run test` | Tests unitarios (17 suites, 194 tests) |
 | `npm run test:e2e` | Tests end-to-end (hace una llamada real a Gemini) |
 | `npm run lint` | ESLint con `--fix` |
 
@@ -257,7 +257,7 @@ Arranca en `http://localhost:3001`. Necesita el backend corriendo.
 - [x] Editar un viaje ya creado (fechas, personas, presupuesto, estado), con recálculo del presupuesto
 - [x] Autocompletado de lugares reales al agregar una actividad
 - [x] Optimización de recorridos por día (heurística tipo TSP: nearest-neighbor + 2-opt), con los horarios corridos a la nueva secuencia
-- [ ] Planes de uso (Gratis / Medio / Ilimitado) con suscripción mensual vía Mercado Pago — en construcción, ver [docs/PLANES.md](docs/PLANES.md)
+- [ ] Planes de uso (Gratis / Base / Premium) con suscripción mensual vía Mercado Pago — en construcción, ver [docs/PLANES.md](docs/PLANES.md)
 
 ## Futuras Mejoras
 

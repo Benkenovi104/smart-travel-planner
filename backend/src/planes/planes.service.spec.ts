@@ -16,7 +16,7 @@ const AHORA = utc(2026, 9, 14, 12);
 const suscripcion = (datos: Record<string, unknown>) => ({
   id_suscripcion: 1,
   id_usuario: 1,
-  plan: 'MEDIO',
+  plan: 'BASE',
   estado: 'ACTIVA',
   mp_preapproval_id: null,
   dia_ancla: utc(2026, 9, 1),
@@ -83,13 +83,13 @@ describe('PlanesService', () => {
 
     it('un plan asignado a mano, sin vigente_hasta, no vence', async () => {
       prisma.suscripcion.findMany.mockResolvedValue([
-        suscripcion({ plan: 'ILIMITADO' }),
+        suscripcion({ plan: 'PREMIUM' }),
       ]);
 
       const vigente = await service.planVigente(1, AHORA);
 
       expect(vigente).toMatchObject({
-        plan: 'ILIMITADO',
+        plan: 'PREMIUM',
         estado: 'ACTIVA',
         vigenteHasta: null,
         periodoDesde: utc(2026, 9, 1),
@@ -103,7 +103,7 @@ describe('PlanesService', () => {
 
       const vigente = await service.planVigente(1, AHORA);
 
-      expect(vigente).toMatchObject({ plan: 'MEDIO', estado: 'EN_GRACIA' });
+      expect(vigente).toMatchObject({ plan: 'BASE', estado: 'EN_GRACIA' });
     });
 
     it('pasada la gracia vuelve a Gratis, con el período anclado al fin del plan pago', async () => {
@@ -123,16 +123,16 @@ describe('PlanesService', () => {
     it('una cancelada da acceso hasta el fin del período pagado, sin gracia', async () => {
       prisma.suscripcion.findMany.mockResolvedValue([
         suscripcion({
-          plan: 'ILIMITADO',
+          plan: 'PREMIUM',
           estado: 'CANCELADA',
           vigente_hasta: utc(2026, 10, 1),
         }),
       ]);
-      expect((await service.planVigente(1, AHORA)).plan).toBe('ILIMITADO');
+      expect((await service.planVigente(1, AHORA)).plan).toBe('PREMIUM');
 
       prisma.suscripcion.findMany.mockResolvedValue([
         suscripcion({
-          plan: 'ILIMITADO',
+          plan: 'PREMIUM',
           estado: 'CANCELADA',
           vigente_hasta: utc(2026, 9, 13),
         }),
@@ -142,18 +142,38 @@ describe('PlanesService', () => {
 
     it('si dos suscripciones dan acceso (subida de plan), gana la mayor', async () => {
       prisma.suscripcion.findMany.mockResolvedValue([
-        suscripcion({ id_suscripcion: 2, plan: 'MEDIO' }),
-        suscripcion({ id_suscripcion: 1, plan: 'ILIMITADO' }),
+        suscripcion({ id_suscripcion: 2, plan: 'BASE' }),
+        suscripcion({ id_suscripcion: 1, plan: 'PREMIUM' }),
       ]);
 
       const vigente = await service.planVigente(1, AHORA);
 
-      expect(vigente).toMatchObject({ plan: 'ILIMITADO', idSuscripcion: 1 });
+      expect(vigente).toMatchObject({ plan: 'PREMIUM', idSuscripcion: 1 });
+    });
+
+    it('un checkout abandonado y dado de baja no corre el período de Gratis', async () => {
+      prisma.suscripcion.findMany.mockResolvedValue([
+        suscripcion({
+          estado: 'CANCELADA',
+          mp_preapproval_id: 'mp-abandonada',
+          vigente_desde: null,
+          cancelada_en: utc(2026, 9, 10),
+        }),
+      ]);
+
+      const vigente = await service.planVigente(1, AHORA);
+
+      // Sigue anclado al registro (13/08), no a la baja del 10/09.
+      expect(vigente).toMatchObject({
+        plan: 'GRATIS',
+        periodoDesde: utc(2026, 9, 13),
+        periodoHasta: utc(2026, 10, 13),
+      });
     });
   });
 
   describe('verificar', () => {
-    it('Gratis con su viaje del período usado: LIMITE_PLAN sugiriendo Medio', async () => {
+    it('Gratis con su viaje del período usado: LIMITE_PLAN sugiriendo Base', async () => {
       prisma.consumo.count.mockResolvedValue(1);
 
       const error = await capturar(
@@ -166,7 +186,7 @@ describe('PlanesService', () => {
         codigo: 'LIMITE_PLAN',
         accion: 'CREAR_VIAJE',
         planActual: 'GRATIS',
-        planSugerido: 'MEDIO',
+        planSugerido: 'BASE',
         limite: 1,
         usado: 1,
         renuevaEl: utc(2026, 10, 13),
@@ -197,7 +217,7 @@ describe('PlanesService', () => {
       });
       expect(error.getResponse()).toMatchObject({
         limite: 1,
-        planSugerido: 'MEDIO',
+        planSugerido: 'BASE',
         renuevaEl: null,
       });
     });
@@ -210,18 +230,18 @@ describe('PlanesService', () => {
       expect(prisma.consumo.count).not.toHaveBeenCalled();
       expect(error.getResponse()).toMatchObject({
         limite: 0,
-        planSugerido: 'MEDIO',
+        planSugerido: 'BASE',
         message: 'Regenerar el itinerario no está incluido en el plan Gratis.',
       });
     });
 
-    it('optimizar está bloqueado en Gratis y permitido en Medio', async () => {
+    it('optimizar está bloqueado en Gratis y permitido en Base', async () => {
       const error = await capturar(
         service.verificar(1, 'OPTIMIZAR_DIA', 7, AHORA),
       );
       expect(error.getResponse()).toMatchObject({
         codigo: 'LIMITE_PLAN',
-        planSugerido: 'MEDIO',
+        planSugerido: 'BASE',
       });
 
       prisma.suscripcion.findMany.mockResolvedValue([suscripcion({})]);
@@ -230,7 +250,7 @@ describe('PlanesService', () => {
       ).resolves.toBeUndefined();
     });
 
-    it('en Medio, agotada la búsqueda de vuelos sugiere Ilimitado', async () => {
+    it('en Base, agotada la búsqueda de vuelos sugiere Premium', async () => {
       prisma.suscripcion.findMany.mockResolvedValue([suscripcion({})]);
       prisma.consumo.count.mockResolvedValue(1);
 
@@ -239,15 +259,15 @@ describe('PlanesService', () => {
       );
 
       expect(error.getResponse()).toMatchObject({
-        planActual: 'MEDIO',
-        planSugerido: 'ILIMITADO',
+        planActual: 'BASE',
+        planSugerido: 'PREMIUM',
         limite: 1,
       });
     });
 
-    it('en Ilimitado, agotados los vuelos no hay plan que sugerir', async () => {
+    it('en Premium, agotados los vuelos no hay plan que sugerir', async () => {
       prisma.suscripcion.findMany.mockResolvedValue([
-        suscripcion({ plan: 'ILIMITADO' }),
+        suscripcion({ plan: 'PREMIUM' }),
       ]);
       prisma.consumo.count.mockResolvedValue(3);
 
@@ -263,7 +283,7 @@ describe('PlanesService', () => {
 
     it('el tope diario frena aunque el plan no tenga límite, sin sugerir plan', async () => {
       prisma.suscripcion.findMany.mockResolvedValue([
-        suscripcion({ plan: 'ILIMITADO' }),
+        suscripcion({ plan: 'PREMIUM' }),
       ]);
       prisma.consumo.count.mockImplementation(async (args: any) =>
         args.where.tipo?.in ? 10 : 0,
@@ -284,7 +304,7 @@ describe('PlanesService', () => {
 
     it('el tope de búsquedas suma vuelos y alojamiento en las últimas 24 horas', async () => {
       prisma.suscripcion.findMany.mockResolvedValue([
-        suscripcion({ plan: 'ILIMITADO' }),
+        suscripcion({ plan: 'PREMIUM' }),
       ]);
 
       await service.verificar(1, 'BUSCAR_ALOJAMIENTO', 7, AHORA);
@@ -350,11 +370,13 @@ describe('PlanesService', () => {
   });
 
   describe('catalogo', () => {
-    it('lista los tres planes en orden, sin precios definidos todavía', () => {
+    it('lista los tres planes en orden con sus precios en pesos', () => {
       const { planes } = service.catalogo();
 
-      expect(planes.map((p) => p.plan)).toEqual(['GRATIS', 'MEDIO', 'ILIMITADO']);
-      expect(planes.map((p) => p.precioMensualArs)).toEqual([0, null, null]);
+      expect(planes.map((p) => p.plan)).toEqual(['GRATIS', 'BASE', 'PREMIUM']);
+      expect(planes.map((p) => p.precioMensualArs)).toEqual([
+        0, 12_500, 38_500,
+      ]);
     });
   });
 });

@@ -205,7 +205,7 @@ export function VuelosSection({ idViaje }: { idViaje: number }) {
               className="flex items-center gap-1 text-xs font-semibold text-sky-400 hover:text-sky-300"
             >
               <Lock className="size-3" />
-              Buscar vuelos: desde el plan Medio
+              Buscar vuelos: desde el plan Base
             </Link>
           )}
           {!noIncluido && (
@@ -247,7 +247,7 @@ export function VuelosSection({ idViaje }: { idViaje: number }) {
               Buscar vuelos no está incluido en el plan {miPlan?.nombrePlan}
             </p>
             <p className="text-xs text-muted-foreground">
-              Desde el plan Medio podés buscar vuelos de ida y vuelta para cada
+              Desde el plan Base podés buscar vuelos de ida y vuelta para cada
               viaje. Mientras tanto, podés seguir planificando sin elegir vuelo.
             </p>
           </div>

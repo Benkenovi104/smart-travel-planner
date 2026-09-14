@@ -3,21 +3,30 @@ import {
   UnauthorizedException,
   NotFoundException,
   ConflictException,
+  BadGatewayException,
 } from '@nestjs/common';
-import { describe, beforeEach, afterEach, it, expect, jest } from '@jest/globals';
+import {
+  describe,
+  beforeEach,
+  afterEach,
+  it,
+  expect,
+  jest,
+} from '@jest/globals';
 import * as bcrypt from 'bcrypt';
 import { UsuariosService } from './usuarios.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { ViajesService } from '../viajes/viajes.service.js';
+import { SuscripcionesService } from '../pagos/suscripciones.service.js';
 
 describe('UsuariosService', () => {
   let service: UsuariosService;
   let prisma: any;
+  let suscripciones: any;
 
   beforeEach(async () => {
     prisma = {
       usuario: { findUnique: jest.fn(), delete: jest.fn() },
-      suscripcion: { findFirst: jest.fn(async () => null) },
       interes: { findUnique: jest.fn() },
       usuarioInteres: {
         findUnique: jest.fn(),
@@ -26,11 +35,13 @@ describe('UsuariosService', () => {
       },
       $transaction: jest.fn(),
     };
+    suscripciones = { cancelarTodas: jest.fn(async () => undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UsuariosService,
         { provide: PrismaService, useValue: prisma },
+        { provide: SuscripcionesService, useValue: suscripciones },
       ],
     }).compile();
 
@@ -50,6 +61,7 @@ describe('UsuariosService', () => {
         UnauthorizedException,
       );
       expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(suscripciones.cancelarTodas).not.toHaveBeenCalled();
     });
 
     it('con password correcta borra viajes (cascade), perfil, intereses y usuario', async () => {
@@ -60,7 +72,9 @@ describe('UsuariosService', () => {
       });
 
       const tx = {
-        viaje: { findMany: jest.fn(async () => [{ id_viaje: 10 }, { id_viaje: 11 }]) },
+        viaje: {
+          findMany: jest.fn(async () => [{ id_viaje: 10 }, { id_viaje: 11 }]),
+        },
         perfilViajero: { deleteMany: jest.fn() },
         usuarioInteres: { deleteMany: jest.fn() },
         usuario: { delete: jest.fn() },
@@ -75,6 +89,11 @@ describe('UsuariosService', () => {
 
       const res = await service.deleteMe(1, 'correcta');
       expect(res.message).toMatch(/eliminada/i);
+      // Primero se cancela en Mercado Pago, y recién después se borra.
+      expect(suscripciones.cancelarTodas).toHaveBeenCalledWith(1);
+      expect(
+        suscripciones.cancelarTodas.mock.invocationCallOrder[0],
+      ).toBeLessThan(prisma.$transaction.mock.invocationCallOrder[0]);
       // un cascade por cada viaje
       expect(cascadeSpy).toHaveBeenCalledTimes(2);
       expect(cascadeSpy).toHaveBeenCalledWith(tx, 10);
@@ -100,25 +119,18 @@ describe('UsuariosService', () => {
       });
     });
 
-    it('con una suscripción cobrada por Mercado Pago activa, no borra nada', async () => {
+    it('si no puede cancelar la suscripción en Mercado Pago, no borra nada', async () => {
       const hash = await bcrypt.hash('correcta', 4);
       prisma.usuario.findUnique.mockResolvedValue({
         id_usuario: 1,
         password_hash: hash,
       });
-      prisma.suscripcion.findFirst.mockResolvedValue({ id_suscripcion: 4 });
+      suscripciones.cancelarTodas.mockRejectedValue(
+        new BadGatewayException('No pudimos cancelar la suscripción'),
+      );
 
       await expect(service.deleteMe(1, 'correcta')).rejects.toBeInstanceOf(
-        ConflictException,
-      );
-      expect(prisma.suscripcion.findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: {
-            id_usuario: 1,
-            mp_preapproval_id: { not: null },
-            estado: { in: ['ACTIVA', 'EN_GRACIA'] },
-          },
-        }),
+        BadGatewayException,
       );
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });

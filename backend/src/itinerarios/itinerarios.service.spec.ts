@@ -20,7 +20,7 @@ const limite = (accion: 'GENERAR_ITINERARIO' | 'REGENERAR_ITINERARIO' | 'OPTIMIZ
     message: 'No incluido en el plan Gratis.',
     accion,
     planActual: 'GRATIS',
-    planSugerido: 'MEDIO',
+    planSugerido: 'BASE',
     limite: 0,
     usado: 0,
     renuevaEl: null,
