@@ -178,6 +178,15 @@ export interface OpcionVueloApi {
   duracion_total: number | null;
   url_referencia: string | null;
   seleccionado: boolean;
+  aerolinea_vuelta: string | null;
+  precio_ida: string | null;
+  precio_vuelta: string | null;
+  duracion_ida: number | null;
+  duracion_vuelta: number | null;
+  escalas_ida: number | null;
+  escalas_vuelta: number | null;
+  llegada_ida: string | null;
+  llegada_vuelta: string | null;
 }
 
 export interface OpcionAlojamientoApi {

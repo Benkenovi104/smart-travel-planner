@@ -172,18 +172,21 @@ Responde ÚNICAMENTE con un JSON válido con esta estructura exacta, sin texto a
     cantidadPersonas: number;
     ritmoPreferido?: string;
     presupuestoPreferido?: string;
+    /** Noches de la estadía, para que la IA razone el costo total. */
+    noches?: number;
     hotelesDisponibles: Array<{
       id: string;
       nombre: string;
       direccion: string | null;
       rating: number | null;
       userRatingCount: number | null;
+      /** Precio real por noche (Booking). `null` si no se conoce. */
+      precioPorNoche?: number | null;
     }>;
   }): Promise<
     Array<{
       id: string;
       razonRecomendacion: string;
-      precioEstimadoPorNoche: number;
     }>
   > {
     if (!params.hotelesDisponibles || params.hotelesDisponibles.length === 0) {
@@ -196,29 +199,31 @@ PERFIL DEL VIAJE:
 - Destino: ${params.destino}
 - Personas: ${params.cantidadPersonas}
 ${params.presupuestoTotal ? `- Presupuesto total viaje: USD ${params.presupuestoTotal}` : ''}
+${params.noches ? `- Noches de estadía: ${params.noches}` : ''}
 ${params.presupuestoPreferido ? `- Nivel de presupuesto preferido: ${params.presupuestoPreferido}` : ''}
 ${params.ritmoPreferido ? `- Ritmo de viaje: ${params.ritmoPreferido}` : ''}
 
 CANDIDATOS REALES DE HOTELES:
 ${params.hotelesDisponibles
-  .map(
-    (h) =>
-      `- ID: "${h.id}" | Nombre: "${h.nombre}" | Dirección: "${h.direccion ?? 'N/A'}" | Rating: ${h.rating ?? 'N/A'} (${h.userRatingCount ?? 0} opiniones)`,
-  )
+  .map((h) => {
+    const precio =
+      h.precioPorNoche != null
+        ? ` | Precio REAL por noche: USD ${h.precioPorNoche.toFixed(0)}`
+        : '';
+    return `- ID: "${h.id}" | Nombre: "${h.nombre}" | Dirección: "${h.direccion ?? 'N/A'}" | Rating: ${h.rating ?? 'N/A'} (${h.userRatingCount ?? 0} opiniones)${precio}`;
+  })
   .join('\n')}
 
 INSTRUCCIONES:
 1. Selecciona entre 3 y 4 mejores hoteles de la lista proporcionada.
 2. Para cada hotel seleccionado, genera un breve texto de justificación ultracorto y conciso ("razonRecomendacion") de MÁXIMO 12 PALABRAS explicando por qué destaca para este viaje.
-3. Asigna un precio estimado razonable por noche en USD por habitación ("precioEstimadoPorNoche") alineado con la calidad y presupuesto.
-
+3. Si los candidatos traen "Precio REAL por noche", tenelo MUY en cuenta: priorizá los que entran cómodos en el presupuesto y mencioná la relación precio/calidad cuando sea lo que destaca. NUNCA inventes un precio que no esté en la lista.
 
 Responde ÚNICAMENTE en JSON con esta estructura exacta sin markdown adicional:
 [
   {
     "id": "ID_DEL_HOTEL",
-    "razonRecomendacion": "Excelente opción céntrica ideal para descansar en pareja...",
-    "precioEstimadoPorNoche": 120
+    "razonRecomendacion": "Excelente opción céntrica ideal para descansar en pareja..."
   }
 ]`;
 
@@ -238,7 +243,6 @@ Responde ÚNICAMENTE en JSON con esta estructura exacta sin markdown adicional:
       return JSON.parse(text) as Array<{
         id: string;
         razonRecomendacion: string;
-        precioEstimadoPorNoche: number;
       }>;
     } catch (error) {
       this.logger.error('Error al calificar alojamientos con Gemini', error);

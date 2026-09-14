@@ -1,10 +1,11 @@
 'use client';
 
-import { Wallet } from 'lucide-react';
+import { Info, Wallet } from 'lucide-react';
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent } from '@/components/ui/card';
 import { usePresupuesto } from '@/lib/query/use-presupuesto';
+import { useAlojamiento } from '@/lib/query/use-reservas';
 import { ApiError } from '@/lib/api/client';
 import { formatMoney } from '@/lib/format';
 import type { Presupuesto, Viaje } from '@/lib/types/models';
@@ -34,6 +35,14 @@ export function PresupuestoSection({
   viaje: Viaje;
 }) {
   const { data, isLoading, isError, error } = usePresupuesto(idViaje);
+  const { data: alojamientos } = useAlojamiento(idViaje);
+
+  // Los hoteles que vienen de Google Places no traen tarifa, así que el
+  // alojamiento elegido puede no sumar nada. Sin este aviso el total parece un
+  // error de cálculo.
+  const hotelSinPrecio = alojamientos?.find(
+    (a) => a.seleccionado && a.precioPorNoche == null,
+  );
 
   const sinPresupuesto =
     isError && error instanceof ApiError && error.status === 404;
@@ -93,6 +102,19 @@ export function PresupuestoSection({
               </div>
             )}
           </div>
+
+          {hotelSinPrecio && (
+            <p className="flex items-start gap-1.5 rounded-lg bg-muted/50 p-2.5 text-xs leading-snug text-muted-foreground">
+              <Info className="mt-px size-3.5 shrink-0 text-amber-500" />
+              <span>
+                <strong className="font-medium text-foreground">
+                  {hotelSinPrecio.nombre ?? 'El alojamiento elegido'}
+                </strong>{' '}
+                no tiene tarifa publicada en Google, así que no está incluido en
+                este total. Consultá el precio en el sitio del hotel.
+              </span>
+            </p>
+          )}
 
           {total > 0 && (
             <div

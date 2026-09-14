@@ -119,6 +119,83 @@ describe('VuelosService', () => {
     expect(creados[0].moneda).toBe('USD');
   });
 
+  it('guarda el detalle de cada tramo por separado, no sólo el total', async () => {
+    prisma.viaje.findUnique.mockResolvedValue(viaje);
+    sky.resolverAeropuerto.mockImplementation(async (n: string) => ({
+      skyId: n,
+      entityId: 'E',
+    }));
+    sky.buscarVuelos
+      .mockResolvedValueOnce([
+        { origen: 'Buenos Aires', destino: 'Mendoza', fecha: '2026-09-10T21:55:00', llegada: '2026-09-11T01:20:00', aerolinea: 'Ethiopian', precio: 80, duracionMinutos: 205, escalas: 1 },
+      ])
+      .mockResolvedValueOnce([
+        { origen: 'Mendoza', destino: 'Buenos Aires', fecha: '2026-09-13T09:00:00', llegada: '2026-09-13T10:45:00', aerolinea: 'LATAM', precio: 90, duracionMinutos: 105, escalas: 0 },
+      ]);
+    prisma.opcionVuelo.findMany.mockResolvedValue([]);
+
+    let creados: any[] = [];
+    prisma.$transaction.mockImplementation(async (cb: any) =>
+      cb({
+        opcionVuelo: {
+          deleteMany: jest.fn(),
+          createMany: jest.fn((arg: any) => {
+            creados = arg.data;
+          }),
+        },
+      }),
+    );
+
+    await service.buscarYGuardar(1, 5);
+    const o = creados[0];
+
+    // Cada dirección conserva su aerolínea y su precio: la ida y la vuelta son
+    // dos pasajes distintos y pueden ser de compañías diferentes.
+    expect(o.aerolinea).toBe('Ethiopian');
+    expect(o.aerolinea_vuelta).toBe('LATAM');
+    expect(o.precio_ida).toBe(80);
+    expect(o.precio_vuelta).toBe(90);
+    expect(o.precio).toBe(170);
+    expect(o.escalas_ida).toBe(1);
+    expect(o.escalas_vuelta).toBe(0);
+    expect(o.duracion_ida).toBe(205);
+    expect(o.duracion_total).toBe(310);
+  });
+
+  it('no corre las horas del vuelo por la zona horaria del servidor', async () => {
+    prisma.viaje.findUnique.mockResolvedValue(viaje);
+    sky.resolverAeropuerto.mockImplementation(async (n: string) => ({
+      skyId: n,
+      entityId: 'E',
+    }));
+    // Sky Scrapper manda la hora local del aeropuerto, sin zona.
+    sky.buscarVuelos
+      .mockResolvedValueOnce([
+        { origen: 'Buenos Aires', destino: 'Mendoza', fecha: '2026-09-10T21:55:00', llegada: '2026-09-10T23:40:00', aerolinea: 'A', precio: 80, duracionMinutos: 105, escalas: 0 },
+      ])
+      .mockResolvedValueOnce([]);
+    prisma.opcionVuelo.findMany.mockResolvedValue([]);
+
+    let creados: any[] = [];
+    prisma.$transaction.mockImplementation(async (cb: any) =>
+      cb({
+        opcionVuelo: {
+          deleteMany: jest.fn(),
+          createMany: jest.fn((arg: any) => {
+            creados = arg.data;
+          }),
+        },
+      }),
+    );
+
+    await service.buscarYGuardar(1, 5);
+
+    // Sale 21:55 del día 10: se guarda tal cual, no corrido al día siguiente
+    // por interpretar el string en la zona del server.
+    expect(creados[0].fechaSalida.toISOString()).toBe('2026-09-10T21:55:00.000Z');
+    expect(creados[0].llegada_ida.toISOString()).toBe('2026-09-10T23:40:00.000Z');
+  });
+
   describe('seleccionar', () => {
     it('deselecciona las demás opciones del viaje y recalcula el presupuesto', async () => {
       prisma.viaje.findUnique.mockResolvedValue(viaje);

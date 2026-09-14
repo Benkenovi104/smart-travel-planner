@@ -54,7 +54,11 @@ export class VuelosService {
     ]);
 
     // Rankeamos por precio ascendente (criterio: ajuste al presupuesto) y
-    // combinamos ida+vuelta por posición para armar opciones de ida y vuelta.
+    // combinamos ida+vuelta por posición. OJO: son dos pasajes independientes,
+    // no un producto de ida y vuelta de una aerolínea — la ida más barata puede
+    // ser de una compañía y la vuelta de otra. Por eso cada tramo se persiste
+    // con su propia aerolínea y precio, y la UI los muestra por separado en vez
+    // de fingir un combo único.
     const idaOrdenada = [...vuelosIda].sort((a, b) => a.precio - b.precio);
     const vueltaOrdenada = [...vuelosVuelta].sort(
       (a, b) => a.precio - b.precio,
@@ -65,18 +69,44 @@ export class VuelosService {
       vueltaOrdenada.length || idaOrdenada.length,
     );
 
+    // Sky Scrapper manda la hora local del aeropuerto SIN zona horaria
+    // ("2026-09-14T21:55:00"). `new Date()` la interpreta en la zona del server
+    // (UTC-3 acá) y la guardaría corrida 3 horas, al punto de mostrar la salida
+    // un día después del que es. Se le agrega la Z para persistir el horario de
+    // pared tal cual, igual que hace itinerarios.service.ts con las actividades.
+    const fechaVuelo = (v?: string | null) => {
+      if (!v) return null;
+      const horaYZona = v.slice(10);
+      const tieneZona =
+        horaYZona.includes('Z') ||
+        horaYZona.includes('+') ||
+        horaYZona.lastIndexOf('-') > 0;
+      return new Date(tieneZona ? v : `${v}Z`);
+    };
+
     const opciones = idaOrdenada.slice(0, cantidad).map((ida, i) => {
       const vuelta = vueltaOrdenada[i];
       return {
         id_viaje,
         origen: ida.origen,
         destino: ida.destino,
-        fechaSalida: new Date(ida.fecha),
-        fecha_regreso: vuelta ? new Date(vuelta.fecha) : undefined,
+        fechaSalida: fechaVuelo(ida.fecha)!,
+        fecha_regreso: fechaVuelo(vuelta?.fecha) ?? undefined,
         aerolinea: ida.aerolinea,
         precio: ida.precio + (vuelta?.precio ?? 0),
         moneda: 'USD',
         duracion_total: ida.duracionMinutos + (vuelta?.duracionMinutos ?? 0),
+        // Detalle por tramo, para que la UI pueda explicar qué se toma en cada
+        // dirección en vez de mostrar un precio sumado y una sola aerolínea.
+        aerolinea_vuelta: vuelta?.aerolinea ?? null,
+        precio_ida: ida.precio,
+        precio_vuelta: vuelta?.precio ?? null,
+        duracion_ida: ida.duracionMinutos,
+        duracion_vuelta: vuelta?.duracionMinutos ?? null,
+        escalas_ida: ida.escalas,
+        escalas_vuelta: vuelta?.escalas ?? null,
+        llegada_ida: fechaVuelo(ida.llegada),
+        llegada_vuelta: fechaVuelo(vuelta?.llegada),
       };
     });
 

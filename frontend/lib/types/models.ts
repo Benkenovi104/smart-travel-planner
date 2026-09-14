@@ -129,6 +129,17 @@ export interface Presupuesto {
   gastos: GastoEstimado[];
 }
 
+/** Un tramo del viaje: la ida o la vuelta. Se cotizan por separado. */
+export interface TramoVuelo {
+  aerolinea: string | null;
+  salida: string | null;
+  llegada: string | null;
+  precio: number | null;
+  /** Puerta a puerta: incluye el tiempo de escala, no es sólo tiempo de vuelo. */
+  duracionMinutos: number | null;
+  escalas: number | null;
+}
+
 export interface OpcionVuelo {
   id: number;
   origen: string | null;
@@ -142,6 +153,8 @@ export interface OpcionVuelo {
   duracionTotal: number | null;
   url: string | null;
   seleccionado: boolean;
+  ida: TramoVuelo;
+  vuelta: TramoVuelo | null;
 }
 
 export interface OpcionAlojamiento {
@@ -158,6 +171,14 @@ export interface OpcionAlojamiento {
   fotos?: string[];
   razonRecomendacion?: string;
   seleccionado: boolean;
+  /** La IA realmente analizó este hotel (no es un relleno para completar la lista). */
+  recomendadoIA: boolean;
+  /** `precioPorNoche` es una tarifa real (Booking) y no una banda de Google. */
+  precioReal: boolean;
+  /** De dónde salió el precio, para poder decirlo en la UI. */
+  fuentePrecio: 'booking' | null;
+  /** Banda de precio de Google Places: 1 a 4 (de `PRICE_LEVEL_*`). No es un monto. */
+  nivelPrecio: number | null;
 }
 
 

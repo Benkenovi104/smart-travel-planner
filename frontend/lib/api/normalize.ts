@@ -176,13 +176,48 @@ export function normalizeVuelo(v: OpcionVueloApi): OpcionVuelo {
     duracionTotal: v.duracion_total,
     url: v.url_referencia,
     seleccionado: v.seleccionado ?? false,
+    ida: {
+      aerolinea: v.aerolinea,
+      salida: v.fechaSalida,
+      llegada: v.llegada_ida,
+      // Las opciones guardadas antes de que existiera el detalle por tramo no
+      // tienen precio_ida: en ese caso no inventamos un desglose.
+      precio: num(v.precio_ida),
+      duracionMinutos: v.duracion_ida,
+      escalas: v.escalas_ida,
+    },
+    vuelta: v.fecha_regreso
+      ? {
+          aerolinea: v.aerolinea_vuelta,
+          salida: v.fecha_regreso,
+          llegada: v.llegada_vuelta,
+          precio: num(v.precio_vuelta),
+          duracionMinutos: v.duracion_vuelta,
+          escalas: v.escalas_vuelta,
+        }
+      : null,
   };
 }
+
+/**
+ * Bandas de precio de Google Places. No son montos: sólo dicen si el lugar es
+ * barato o caro respecto de su zona.
+ */
+const NIVEL_PRECIO: Record<string, number> = {
+  PRICE_LEVEL_INEXPENSIVE: 1,
+  PRICE_LEVEL_MODERATE: 2,
+  PRICE_LEVEL_EXPENSIVE: 3,
+  PRICE_LEVEL_VERY_EXPENSIVE: 4,
+};
 
 export function normalizeAlojamiento(a: OpcionAlojamientoApi): OpcionAlojamiento {
   let fotoUrl: string | undefined = undefined;
   let fotos: string[] | undefined = undefined;
   let razonRecomendacion: string | undefined = undefined;
+  let recomendadoIA = false;
+  let precioReal = false;
+  let fuentePrecio: 'booking' | null = null;
+  let nivelPrecio: number | null = null;
   let webUrl: string | null = a.url_referencia;
 
   if (a.url_referencia && a.url_referencia.trim().startsWith('{')) {
@@ -192,6 +227,10 @@ export function normalizeAlojamiento(a: OpcionAlojamientoApi): OpcionAlojamiento
       fotoUrl = parsed.fotoUrl || undefined;
       fotos = Array.isArray(parsed.fotos) && parsed.fotos.length > 0 ? parsed.fotos : (parsed.fotoUrl ? [parsed.fotoUrl] : undefined);
       razonRecomendacion = parsed.razon || undefined;
+      recomendadoIA = parsed.recomendadaIA === true;
+      precioReal = parsed.precioReal === true;
+      fuentePrecio = parsed.fuentePrecio === 'booking' ? 'booking' : null;
+      nivelPrecio = NIVEL_PRECIO[parsed.nivelPrecio as string] ?? null;
     } catch {
       webUrl = a.url_referencia;
     }
@@ -211,6 +250,12 @@ export function normalizeAlojamiento(a: OpcionAlojamientoApi): OpcionAlojamiento
     fotos,
     razonRecomendacion,
     seleccionado: a.seleccionado ?? false,
+    recomendadoIA,
+    // Las filas viejas (Booking, antes de que existiera la metadata) traen un
+    // precio real aunque no lo declaren.
+    precioReal: precioReal || (!recomendadoIA && a.precio_por_noche != null),
+    fuentePrecio,
+    nivelPrecio,
   };
 }
 

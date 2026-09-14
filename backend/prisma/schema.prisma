@@ -216,6 +216,18 @@ model OpcionVuelo {
   moneda         String?   @db.VarChar
   duracion_total Int?
   url_referencia String?   @db.VarChar
+  // La ida y la vuelta son dos pasajes distintos (dos búsquedas separadas), así
+  // que cada tramo guarda su propio precio, aerolínea, duración y escalas.
+  // `aerolinea`, `precio` y `duracion_total` siguen siendo los del combo completo.
+  aerolinea_vuelta String? @db.VarChar
+  precio_ida       Decimal? @db.Decimal(12, 2)
+  precio_vuelta    Decimal? @db.Decimal(12, 2)
+  duracion_ida     Int?
+  duracion_vuelta  Int?
+  escalas_ida      Int?
+  escalas_vuelta   Int?
+  llegada_ida      DateTime? @db.Timestamp(6)
+  llegada_vuelta   DateTime? @db.Timestamp(6)
   // A lo sumo una opcion por viaje queda seleccionada: es la que suma al presupuesto.
   seleccionado   Boolean   @default(false)
   viajes         Viaje     @relation(fields: [id_viaje], references: [id_viaje], onDelete: NoAction, onUpdate: NoAction)

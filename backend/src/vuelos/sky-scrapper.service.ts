@@ -5,9 +5,13 @@ export interface VueloOpcion {
   origen: string;
   destino: string;
   fecha: string;
+  /** Llegada del tramo. Puede caer al día siguiente en vuelos largos o nocturnos. */
+  llegada: string | null;
   aerolinea: string | null;
   precio: number;
+  /** Duración del tramo puerta a puerta: **incluye las escalas**, no es tiempo de vuelo. */
   duracionMinutos: number;
+  escalas: number | null;
 }
 
 interface AirportResult {
@@ -20,7 +24,9 @@ interface FlightLeg {
   origin: { city?: string; name: string };
   destination: { city?: string; name: string };
   departure: string;
+  arrival?: string;
   durationInMinutes: number;
+  stopCount?: number;
   carriers: { marketing?: { name: string }[] };
 }
 
@@ -34,14 +40,18 @@ const HOST = 'sky-scrapper.p.rapidapi.com';
 
 // Datos fixture para el modo mock (RAPIDAPI_MOCK=true): evita quemar cuota del
 // free tier de RapidAPI. Basados en resultados reales de Buenos Aires <-> Mendoza.
-const VUELOS_MOCK: { aerolinea: string; precio: number; duracionMinutos: number }[] =
-  [
-    { aerolinea: 'Flybondi', precio: 87, duracionMinutos: 105 },
-    { aerolinea: 'JetSmart', precio: 94, duracionMinutos: 110 },
-    { aerolinea: 'Aerolíneas Argentinas', precio: 132, duracionMinutos: 100 },
-    { aerolinea: 'Flybondi', precio: 145, duracionMinutos: 115 },
-    { aerolinea: 'Aerolíneas Argentinas', precio: 168, duracionMinutos: 95 },
-  ];
+const VUELOS_MOCK: {
+  aerolinea: string;
+  precio: number;
+  duracionMinutos: number;
+  escalas: number;
+}[] = [
+  { aerolinea: 'Flybondi', precio: 87, duracionMinutos: 105, escalas: 0 },
+  { aerolinea: 'JetSmart', precio: 94, duracionMinutos: 110, escalas: 0 },
+  { aerolinea: 'Aerolíneas Argentinas', precio: 132, duracionMinutos: 100, escalas: 0 },
+  { aerolinea: 'Flybondi', precio: 145, duracionMinutos: 235, escalas: 1 },
+  { aerolinea: 'Aerolíneas Argentinas', precio: 168, duracionMinutos: 95, escalas: 0 },
+];
 
 @Injectable()
 export class SkyScrapperService {
@@ -107,10 +117,17 @@ export class SkyScrapperService {
       return VUELOS_MOCK.map((v) => ({
         origen: params.origen.skyId,
         destino: params.destino.skyId,
-        fecha: params.fecha,
+        fecha: `${params.fecha}T08:00:00`,
+        llegada: new Date(
+          new Date(`${params.fecha}T08:00:00Z`).getTime() +
+            v.duracionMinutos * 60_000,
+        )
+          .toISOString()
+          .replace('Z', ''),
         aerolinea: v.aerolinea,
         precio: v.precio,
         duracionMinutos: v.duracionMinutos,
+        escalas: v.escalas,
       }));
     }
 
@@ -149,9 +166,11 @@ export class SkyScrapperService {
             origen: leg.origin.city ?? leg.origin.name,
             destino: leg.destination.city ?? leg.destination.name,
             fecha: leg.departure,
+            llegada: leg.arrival ?? null,
             aerolinea: leg.carriers.marketing?.[0]?.name ?? null,
             precio: it.price.raw,
             duracionMinutos: leg.durationInMinutes,
+            escalas: leg.stopCount ?? null,
           };
         });
       }

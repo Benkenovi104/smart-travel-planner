@@ -14,6 +14,7 @@ import {
   Map,
   ChevronLeft,
   ChevronRight,
+  Info,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -38,6 +39,17 @@ import { diasEntre, formatMoney } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { OpcionAlojamiento, Viaje } from '@/lib/types/models';
 import { mensajeDeError } from './opcion';
+
+/**
+ * Bandas de precio de Google Places (1 a 4). Es lo único de precio que publica
+ * Places: no es una tarifa, sólo ubica al hotel respecto de los de su zona.
+ */
+const NIVEL_PRECIO_LABEL: Record<number, string> = {
+  1: 'Económico',
+  2: 'Moderado',
+  3: 'Caro',
+  4: 'Muy caro',
+};
 
 const MapaItinerario = dynamic(() => import('@/components/mapa/mapa-itinerario'), {
   ssr: false,
@@ -140,14 +152,13 @@ export function AlojamientoSelector({
   useEffect(() => {
     if (isLoading || buscar.isPending || autoBuscado || !alojamientos) return;
 
-    // Auto-buscar si está vacío o si contiene opciones de prueba antiguas
-    const requiereBusqueda =
-      alojamientos.length === 0 ||
-      alojamientos.some(
-        (a) => !a.fotoUrl && (a.nombre?.includes('Aristides') || a.nombre?.includes('Mendoza')),
-      );
-
-    if (requiereBusqueda) {
+    // Sólo auto-buscamos cuando no hay ninguna opción todavía (primera visita al
+    // paso del wizard). NO se re-busca por el contenido de la lista: buscar hace
+    // un deleteMany de las opciones del viaje, así que cualquier heurística que
+    // dispare sola le borra al usuario el alojamiento que ya había elegido y le
+    // recalcula el presupuesto sin avisar. Si quiere opciones nuevas, está el
+    // botón "Buscar Alojamientos".
+    if (alojamientos.length === 0) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setAutoBuscado(true);
       buscar.mutate(undefined, {
@@ -191,7 +202,7 @@ export function AlojamientoSelector({
             Hospedaje Recomendado por IA
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Opciones reales con fotos, ubicación y recomendaciones personalizadas para {noches} {noches === 1 ? 'noche' : 'noches'}.
+            Precios reales de Booking para tus {noches} {noches === 1 ? 'noche' : 'noches'}, con fotos y ubicación de Google Places.
           </p>
         </div>
 
@@ -237,7 +248,7 @@ export function AlojamientoSelector({
             </p>
           </div>
           <Button size="sm" onClick={onBuscar} disabled={buscar.isPending}>
-            Buscar ahora con Google Places
+            Buscar ahora
           </Button>
         </Card>
       )}
@@ -264,8 +275,9 @@ export function AlojamientoSelector({
                       {a.nombre ?? 'Alojamiento Recomendado'}
                     </CardTitle>
 
-                    {/* Badge de IA compacto con Tooltip al pasar el mouse */}
-                    {a.razonRecomendacion && (
+                    {/* Badge de IA compacto con Tooltip al pasar el mouse.
+                        Sólo en los hoteles que la IA analizó de verdad. */}
+                    {a.recomendadoIA && a.razonRecomendacion && (
                       <div className="group/ai relative shrink-0">
                         <Badge className="bg-purple-950/80 hover:bg-purple-900 text-purple-200 border-purple-500/40 text-[11px] font-semibold gap-1 cursor-help py-0.5 px-2 shadow-xs transition-all">
                           <Sparkles className="size-3 text-purple-400 animate-pulse" />
@@ -321,20 +333,54 @@ export function AlojamientoSelector({
 
                 {/* 4. ABAJO: Precio, Sitio Web, Mapa y Elegir Hospedaje */}
                 <CardContent className="p-4 pt-3 flex-1 space-y-3">
-                  <div className="flex items-baseline justify-between pt-1 border-t text-xs">
-                    <span className="text-muted-foreground font-medium">Precio estimado:</span>
-                    <div className="text-right">
-                      <span className="text-base font-bold text-primary">
-                        {a.precioPorNoche != null ? formatMoney(a.precioPorNoche) : 'Consultar'}
+                  {a.precioPorNoche != null ? (
+                    <div className="flex items-baseline justify-between border-t pt-1 text-xs">
+                      <span className="font-medium text-muted-foreground">
+                        {a.fuentePrecio === 'booking'
+                          ? 'Precio real (Booking):'
+                          : 'Precio por noche:'}
                       </span>
-                      <span className="text-muted-foreground text-xs"> / noche</span>
-                      {costoTotal != null && (
-                        <p className="text-[11px] font-medium text-muted-foreground">
-                          Total ({noches} {noches === 1 ? 'noche' : 'noches'}): {formatMoney(costoTotal)}
-                        </p>
-                      )}
+                      <div className="text-right">
+                        <span className="text-base font-bold text-primary">
+                          {formatMoney(a.precioPorNoche)}
+                        </span>
+                        <span className="text-xs text-muted-foreground"> / noche</span>
+                        {costoTotal != null && (
+                          <p className="text-[11px] font-medium text-muted-foreground">
+                            Total ({noches} {noches === 1 ? 'noche' : 'noches'}): {formatMoney(costoTotal)}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="space-y-1.5 border-t pt-2">
+                      <div className="flex items-baseline justify-between text-xs">
+                        <span className="font-medium text-muted-foreground">Precio:</span>
+                        {a.nivelPrecio != null ? (
+                          <span className="text-right">
+                            <span className="text-base font-bold text-primary">
+                              {'$'.repeat(a.nivelPrecio)}
+                            </span>
+                            <span className="text-muted-foreground">
+                              {'$'.repeat(4 - a.nivelPrecio)}
+                            </span>
+                            <span className="ml-1.5 text-[11px] text-muted-foreground">
+                              {NIVEL_PRECIO_LABEL[a.nivelPrecio]}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-sm font-semibold text-muted-foreground">
+                            A consultar
+                          </span>
+                        )}
+                      </div>
+                      <p className="flex items-start gap-1 text-[11px] leading-snug text-muted-foreground">
+                        <Info className="mt-px size-3 shrink-0" />
+                        Google Places no publica tarifas de hotel. Mirá el precio real
+                        en el sitio oficial; esta opción no suma al presupuesto.
+                      </p>
+                    </div>
+                  )}
                 </CardContent>
 
                 <CardFooter className="p-4 flex flex-wrap gap-2 justify-between border-t border-muted/30 pt-3">
@@ -397,11 +443,13 @@ export function AlojamientoSelector({
                               </p>
                             )}
 
-                            <div className="flex justify-between items-center pt-2">
+                            <div className="flex items-center justify-between pt-2">
                               <span className="text-sm font-semibold">
                                 {alojamientoDetalle.precioPorNoche != null
                                   ? `${formatMoney(alojamientoDetalle.precioPorNoche)} / noche`
-                                  : 'Consultar precio'}
+                                  : alojamientoDetalle.nivelPrecio != null
+                                    ? `Nivel de precio ${'$'.repeat(alojamientoDetalle.nivelPrecio)} · consultar tarifa`
+                                    : 'Consultar precio en el sitio del hotel'}
                               </span>
                               {alojamientoDetalle.url && (
                                 <Button size="sm" asChild variant="outline" className="gap-1">
