@@ -181,4 +181,64 @@ export interface OpcionAlojamiento {
   nivelPrecio: number | null;
 }
 
+// ---------- Planes de uso ----------
 
+export type Plan = 'GRATIS' | 'MEDIO' | 'ILIMITADO';
+
+export type EstadoSuscripcion =
+  | 'PENDIENTE'
+  | 'ACTIVA'
+  | 'EN_GRACIA'
+  | 'CANCELADA'
+  | 'VENCIDA';
+
+/** `null` = sin límite; `0` = no incluido en el plan. */
+export interface LimitesPlan {
+  viajesPorPeriodo: number | null;
+  generarPorViaje: number | null;
+  regenerarPorViaje: number | null;
+  optimizar: boolean;
+  alojamientoPorViaje: number | null;
+  vuelosPorViaje: number | null;
+}
+
+export interface ContadorUso {
+  usado: number;
+  /** `null` = sin límite. */
+  limite: number | null;
+}
+
+export interface MiPlan {
+  plan: Plan;
+  nombrePlan: string;
+  /** `null` en el plan Gratis, que no tiene suscripción. */
+  estado: EstadoSuscripcion | null;
+  idSuscripcion: number | null;
+  periodoDesde: string;
+  periodoHasta: string;
+  vigenteHasta: string | null;
+  limites: LimitesPlan;
+  viajes: ContadorUso;
+  /** Solo si se pidió con `idViaje`. */
+  viaje: {
+    idViaje: number;
+    generarItinerario: ContadorUso;
+    regenerarItinerario: ContadorUso;
+    buscarAlojamiento: ContadorUso;
+    buscarVuelos: ContadorUso;
+    optimizar: boolean;
+  } | null;
+  topeDiario: { itinerario: ContadorUso; busquedas: ContadorUso };
+}
+
+export interface CatalogoPlanes {
+  planes: {
+    plan: Plan;
+    nombre: string;
+    /** `null` mientras no esté definido. */
+    precioMensualArs: number | null;
+    limites: LimitesPlan;
+  }[];
+  topeDiario: { itinerario: number; busquedas: number };
+  diasDeGracia: number;
+}

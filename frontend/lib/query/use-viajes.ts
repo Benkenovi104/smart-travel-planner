@@ -19,6 +19,8 @@ export function useViaje(id: number) {
 export function useCrearViaje() {
   const qc = useQueryClient();
   return useMutation({
+    // Cuenta para el plan: refresca el uso (ver app/providers.tsx).
+    meta: { consumePlan: true },
     mutationFn: api.createViaje,
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.viajes }),
   });

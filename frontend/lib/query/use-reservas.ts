@@ -23,6 +23,7 @@ export function useVuelos(idViaje: number) {
 export function useBuscarVuelos(idViaje: number) {
   const qc = useQueryClient();
   return useMutation({
+    meta: { consumePlan: true },
     mutationFn: () => api.buscarVuelos(idViaje),
     onSuccess: (data) => {
       qc.setQueryData(qk.vuelos(idViaje), data);
@@ -74,6 +75,7 @@ export function useAlojamiento(idViaje: number) {
 export function useBuscarAlojamiento(idViaje: number) {
   const qc = useQueryClient();
   return useMutation({
+    meta: { consumePlan: true },
     mutationFn: () => api.buscarAlojamiento(idViaje),
     onSuccess: (data) => {
       qc.setQueryData(qk.alojamiento(idViaje), data);

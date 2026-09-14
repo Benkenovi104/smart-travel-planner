@@ -26,6 +26,7 @@ import {
   Clock,
   GripVertical,
   Loader2,
+  Lock,
   Pencil,
   Plus,
   Route,
@@ -55,6 +56,8 @@ import {
   useOptimizarDia,
 } from '@/lib/query/use-itinerario';
 import { ApiError } from '@/lib/api/client';
+import { useMiPlan } from '@/lib/query/use-planes';
+import { errorManejadoGlobal } from '@/lib/planes/errores';
 import type { Actividad, Itinerario } from '@/lib/types/models';
 import {
   AgregarActividadDialog,
@@ -244,6 +247,10 @@ function DiaColumn({
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `day-${dia.id}` });
   const optimizar = useOptimizarDia(idViaje);
+  const { data: miPlan } = useMiPlan();
+  // Solo cambia cómo se ve: si el plan no lo incluye, el backend lo rechaza y el
+  // diálogo global explica qué plan lo habilita.
+  const optimizarBloqueado = miPlan?.limites.optimizar === false;
 
   // Total del día calculado desde las actividades (las canceladas no cuentan),
   // así se mantiene consistente con lo que se ve al editar/agregar/eliminar.
@@ -267,10 +274,12 @@ function DiaColumn({
             ? `Recorrido del día ${dia.numeroDia} optimizado`
             : 'El recorrido ya era el más corto',
         ),
-      onError: (e) =>
+      onError: (e) => {
+        if (errorManejadoGlobal(e)) return;
         toast.error(
           e instanceof ApiError ? e.message : 'No se pudo optimizar el recorrido',
-        ),
+        );
+      },
     });
   }
 
@@ -320,10 +329,16 @@ function DiaColumn({
                 size="sm"
                 onClick={onOptimizar}
                 disabled={optimizar.isPending}
-                title="Reordenar las paradas por cercanía"
+                title={
+                  optimizarBloqueado
+                    ? 'Optimizar el recorrido no está incluido en tu plan'
+                    : 'Reordenar las paradas por cercanía'
+                }
               >
                 {optimizar.isPending ? (
                   <Loader2 className="size-4 animate-spin" />
+                ) : optimizarBloqueado ? (
+                  <Lock className="size-4" />
                 ) : (
                   <Route className="size-4" />
                 )}

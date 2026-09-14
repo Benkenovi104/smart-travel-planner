@@ -3,12 +3,18 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  MutationCache,
   QueryCache,
   QueryClient,
   QueryClientProvider,
 } from '@tanstack/react-query';
 import { Toaster, toast } from 'sonner';
 import { ApiError } from '@/lib/api/client';
+import { qk } from '@/lib/query/keys';
+import { borradorExistente, errorDePlan } from '@/lib/planes/errores';
+import { mostrarDialogoLimite } from '@/lib/planes/dialogo-limite';
+import { DialogoLimite } from '@/components/planes/dialogo-limite';
+import { PRIMER_PASO } from '@/components/viajes/wizard-pasos';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -38,6 +44,40 @@ export function Providers({ children }: { children: React.ReactNode }) {
           router.replace(`/login?next=${encodeURIComponent(actual)}`);
         },
       }),
+      /**
+       * Los rechazos por plan se muestran igual en toda la app: un diálogo con el
+       * plan que habilita la acción. Las pantallas no los repiten en su propio
+       * toast (ver `errorManejadoGlobal`).
+       *
+       * Y cada acción marcada con `meta.consumePlan` refresca el uso, así los
+       * medidores y contadores quedan al día sin que cada pantalla lo recuerde.
+       */
+      mutationCache: new MutationCache({
+        onError: (error) => {
+          const limite = errorDePlan(error);
+          if (limite) {
+            mostrarDialogoLimite(limite);
+            return;
+          }
+          const borrador = borradorExistente(error);
+          if (borrador) {
+            toast.error(borrador.message, {
+              action: {
+                label: 'Retomar',
+                onClick: () =>
+                  router.push(
+                    `/viajes/${borrador.idViaje}/crear?paso=${PRIMER_PASO}`,
+                  ),
+              },
+            });
+          }
+        },
+        onSuccess: (_data, _variables, _context, mutation) => {
+          if (mutation.meta?.consumePlan) {
+            qc.invalidateQueries({ queryKey: qk.miPlanTodos });
+          }
+        },
+      }),
       defaultOptions: {
         queries: {
           staleTime: 30_000,
@@ -55,6 +95,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={queryClient}>
       {children}
       <Toaster richColors position="top-right" />
+      <DialogoLimite />
     </QueryClientProvider>
   );
 }

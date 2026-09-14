@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import {
   BedDouble,
@@ -39,6 +39,8 @@ import { diasEntre, formatMoney } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { OpcionAlojamiento, Viaje } from '@/lib/types/models';
 import { mensajeDeError } from './opcion';
+import { useMiPlan } from '@/lib/query/use-planes';
+import { errorManejadoGlobal } from '@/lib/planes/errores';
 
 /**
  * Bandas de precio de Google Places (1 a 4). Es lo único de precio que publica
@@ -147,25 +149,19 @@ export function AlojamientoSelector({
   const buscar = useBuscarAlojamiento(idViaje);
   const seleccionar = useSeleccionarAlojamiento(idViaje);
   const [alojamientoDetalle, setAlojamientoDetalle] = useState<OpcionAlojamiento | null>(null);
-  const [autoBuscado, setAutoBuscado] = useState<boolean>(false);
+  const { data: miPlan } = useMiPlan(idViaje);
 
-  useEffect(() => {
-    if (isLoading || buscar.isPending || autoBuscado || !alojamientos) return;
+  // Buscar siempre es una acción explícita del usuario. Antes se disparaba sola
+  // al entrar al paso con la lista vacía, pero cada búsqueda cuenta para el plan:
+  // en Gratis le gastaba al usuario su única búsqueda del viaje sin pedirla.
 
-    // Sólo auto-buscamos cuando no hay ninguna opción todavía (primera visita al
-    // paso del wizard). NO se re-busca por el contenido de la lista: buscar hace
-    // un deleteMany de las opciones del viaje, así que cualquier heurística que
-    // dispare sola le borra al usuario el alojamiento que ya había elegido y le
-    // recalcula el presupuesto sin avisar. Si quiere opciones nuevas, está el
-    // botón "Buscar Alojamientos".
-    if (alojamientos.length === 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setAutoBuscado(true);
-      buscar.mutate(undefined, {
-        onError: () => {},
-      });
-    }
-  }, [alojamientos, isLoading, buscar, autoBuscado]);
+  // Solo informa cuántas quedan: el límite lo aplica el backend, y si no hay cupo
+  // el diálogo global explica qué plan lo amplía.
+  const cupo = miPlan?.viaje?.buscarAlojamiento;
+  const busquedasRestantes =
+    cupo && cupo.limite !== null
+      ? `Búsquedas: ${Math.max(0, cupo.limite - cupo.usado)} de ${cupo.limite}`
+      : null;
 
   function onBuscar() {
     buscar.mutate(undefined, {
@@ -173,8 +169,10 @@ export function AlojamientoSelector({
         opciones.length > 0
           ? toast.success(`Se encontraron ${opciones.length} alojamientos enriquecidos.`)
           : toast.info('No se encontraron alojamientos para este destino.'),
-      onError: (e) =>
-        toast.error(mensajeDeError(e, 'No se pudo buscar alojamientos con Google Places')),
+      onError: (e) => {
+        if (errorManejadoGlobal(e)) return;
+        toast.error(mensajeDeError(e, 'No se pudo buscar alojamientos'));
+      },
     });
   }
 
@@ -206,7 +204,12 @@ export function AlojamientoSelector({
           </p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {busquedasRestantes && (
+            <span className="text-xs text-muted-foreground">
+              {busquedasRestantes}
+            </span>
+          )}
           {onSkip && (
             <Button variant="ghost" size="sm" onClick={onSkip} className="text-xs">
               Omitir por ahora

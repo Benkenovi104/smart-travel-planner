@@ -5,6 +5,7 @@ import { MapPinned, Plus, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ViajeCard } from '@/components/viajes/viaje-card';
+import { MedidorUso } from '@/components/planes/medidor-uso';
 import { useViajes } from '@/lib/query/use-viajes';
 
 export default function DashboardPage() {
@@ -40,6 +41,8 @@ export default function DashboardPage() {
           </Button>
         </div>
       </div>
+
+      <MedidorUso />
 
       {/* Grid Status / Loading */}
       {isLoading && (

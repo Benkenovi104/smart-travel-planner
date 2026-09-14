@@ -6,6 +6,7 @@ import { Plane, LogOut, Compass, User, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useLogout } from '@/lib/query/use-auth';
+import { PlanBadge } from '@/components/planes/plan-badge';
 
 const LINKS = [
   { href: '/dashboard', label: 'Mis Viajes', icon: Compass },
@@ -45,6 +46,7 @@ export function Navbar() {
 
         {/* Navigation */}
         <nav className="flex shrink-0 items-center gap-1 sm:gap-2">
+          <PlanBadge />
           {LINKS.map((link) => {
             const active = pathname.startsWith(link.href);
             const Icon = link.icon;

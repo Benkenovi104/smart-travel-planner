@@ -8,6 +8,7 @@ import {
   CalendarDays,
   CalendarSearch,
   Loader2,
+  Lock,
   MapPin,
   RefreshCw,
   Sparkles,
@@ -55,6 +56,9 @@ import { AlojamientoSection } from '@/components/reservas/alojamiento-section';
 import { useViaje, useEliminarViaje } from '@/lib/query/use-viajes';
 import { useItinerario, useGenerarItinerario } from '@/lib/query/use-itinerario';
 import { ApiError } from '@/lib/api/client';
+import { useMiPlan } from '@/lib/query/use-planes';
+import { errorManejadoGlobal } from '@/lib/planes/errores';
+import type { ContadorUso } from '@/lib/types/models';
 import { formatFecha, formatMoney, formatRango } from '@/lib/format';
 
 export default function ViajeDetallePage() {
@@ -66,6 +70,7 @@ export default function ViajeDetallePage() {
   const itinerario = useItinerario(id);
   const generar = useGenerarItinerario(id);
   const eliminar = useEliminarViaje();
+  const { data: usoViaje } = useMiPlan(id);
 
   const [tab, setTab] = useState('itinerario');
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
@@ -109,10 +114,12 @@ export default function ViajeDetallePage() {
   function onGenerar() {
     generar.mutate(undefined, {
       onSuccess: () => toast.success('Itinerario generado'),
-      onError: (e) =>
+      onError: (e) => {
+        if (errorManejadoGlobal(e)) return;
         toast.error(
           e instanceof ApiError ? e.message : 'No se pudo generar el itinerario',
-        ),
+        );
+      },
     });
   }
 
@@ -291,6 +298,7 @@ export default function ViajeDetallePage() {
                 <RegenerarButton
                   pending={generar.isPending}
                   onConfirm={onGenerar}
+                  cupo={usoViaje?.viaje?.regenerarItinerario}
                 />
               </div>
             </div>
@@ -399,10 +407,34 @@ function Dato({
 function RegenerarButton({
   pending,
   onConfirm,
+  cupo,
 }: {
   pending: boolean;
   onConfirm: () => void;
+  /** Uso del plan en este viaje. Solo informa: el límite lo aplica el backend. */
+  cupo?: ContadorUso;
 }) {
+  const bloqueado = cupo?.limite === 0;
+  const restantes =
+    cupo && cupo.limite ? Math.max(0, cupo.limite - cupo.usado) : null;
+
+  // Si el plan no incluye regenerar, no tiene sentido pedir confirmación para
+  // borrar el itinerario: va directo y el diálogo del plan explica el porqué.
+  if (bloqueado) {
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={pending}
+        onClick={onConfirm}
+        title="Regenerar el itinerario no está incluido en tu plan"
+      >
+        <Lock className="size-4" />
+        Regenerar
+      </Button>
+    );
+  }
+
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -413,6 +445,9 @@ function RegenerarButton({
             <RefreshCw className="size-4" />
           )}
           Regenerar
+          {restantes !== null && (
+            <span className="text-muted-foreground text-xs">({restantes})</span>
+          )}
         </Button>
       </DialogTrigger>
       <DialogContent>
@@ -421,6 +456,10 @@ function RegenerarButton({
           <DialogDescription>
             Se reemplazará el itinerario actual por uno nuevo. Se perderán las
             ediciones manuales que hayas hecho.
+            {restantes !== null &&
+              (restantes === 1
+                ? ' Te queda 1 regeneración en este viaje.'
+                : ` Te quedan ${restantes} regeneraciones en este viaje.`)}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

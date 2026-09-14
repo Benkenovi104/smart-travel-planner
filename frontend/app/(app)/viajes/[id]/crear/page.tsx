@@ -26,6 +26,7 @@ import { WizardResumen } from '@/components/viajes/wizard-resumen';
 import { useViaje, useActualizarViaje } from '@/lib/query/use-viajes';
 import { useGenerarItinerario } from '@/lib/query/use-itinerario';
 import { ApiError } from '@/lib/api/client';
+import { errorManejadoGlobal } from '@/lib/planes/errores';
 
 const COPY: Record<number, { titulo: string; descripcion: string }> = {
   2: {
@@ -99,10 +100,12 @@ function Wizard() {
         toast.success('Itinerario generado');
         terminar();
       },
-      onError: (e) =>
+      onError: (e) => {
+        if (errorManejadoGlobal(e)) return;
         toast.error(
           e instanceof ApiError ? e.message : 'No se pudo generar el itinerario',
-        ),
+        );
+      },
     });
   }
 

@@ -6,9 +6,11 @@ import {
   Clock,
   PlaneLanding,
   PlaneTakeoff,
+  Lock,
   RefreshCw,
   Ticket,
 } from 'lucide-react';
+import Link from 'next/link';
 import { toast } from 'sonner';
 
 import { Badge } from '@/components/ui/badge';
@@ -23,6 +25,8 @@ import {
 import { formatFecha, formatHora, formatMoney } from '@/lib/format';
 import type { OpcionVuelo, TramoVuelo } from '@/lib/types/models';
 import { mensajeDeError } from './opcion';
+import { useMiPlan } from '@/lib/query/use-planes';
+import { errorManejadoGlobal } from '@/lib/planes/errores';
 
 /** "18h 45m" a partir de minutos. */
 function formatDuracion(minutos: number | null): string | null {
@@ -139,6 +143,16 @@ export function VuelosSection({ idViaje }: { idViaje: number }) {
   const { data, isLoading, isError } = useVuelos(idViaje);
   const buscar = useBuscarVuelos(idViaje);
   const seleccionar = useSeleccionarVuelo(idViaje);
+  const { data: miPlan } = useMiPlan(idViaje);
+
+  // Solo informa: el límite lo aplica el backend. Con `limite` 0 el plan no
+  // incluye vuelos, y en vez del buscador se explica qué plan los habilita.
+  const cupo = miPlan?.viaje?.buscarVuelos;
+  const noIncluido = cupo?.limite === 0;
+  const busquedasRestantes =
+    cupo && cupo.limite
+      ? `Búsquedas: ${Math.max(0, cupo.limite - cupo.usado)} de ${cupo.limite}`
+      : null;
 
   function onBuscar() {
     buscar.mutate(undefined, {
@@ -146,8 +160,10 @@ export function VuelosSection({ idViaje }: { idViaje: number }) {
         opciones.length > 0
           ? toast.success(`Se encontraron ${opciones.length} opciones de vuelo.`)
           : toast.info('No se encontraron vuelos para estas fechas.'),
-      onError: (e) =>
-        toast.error(mensajeDeError(e, 'No se pudieron buscar vuelos')),
+      onError: (e) => {
+        if (errorManejadoGlobal(e)) return;
+        toast.error(mensajeDeError(e, 'No se pudieron buscar vuelos'));
+      },
     });
   }
 
@@ -175,17 +191,37 @@ export function VuelosSection({ idViaje }: { idViaje: number }) {
           </p>
         </div>
 
-        <Button
-          size="sm"
-          onClick={onBuscar}
-          disabled={buscar.isPending}
-          className="gap-1.5 bg-primary text-xs hover:bg-primary/90"
-        >
-          <RefreshCw
-            className={buscar.isPending ? 'size-3.5 animate-spin' : 'size-3.5'}
-          />
-          {buscar.isPending ? 'Buscando...' : 'Buscar Vuelos'}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {busquedasRestantes && (
+            <span className="text-xs text-muted-foreground">
+              {busquedasRestantes}
+            </span>
+          )}
+          {/* Con vuelos ya guardados no se muestra la tarjeta del plan, pero
+              hay que avisar igual por qué no hay botón para buscar de nuevo. */}
+          {noIncluido && data && data.length > 0 && (
+            <Link
+              href="/planes"
+              className="flex items-center gap-1 text-xs font-semibold text-sky-400 hover:text-sky-300"
+            >
+              <Lock className="size-3" />
+              Buscar vuelos: desde el plan Medio
+            </Link>
+          )}
+          {!noIncluido && (
+            <Button
+              size="sm"
+              onClick={onBuscar}
+              disabled={buscar.isPending}
+              className="gap-1.5 bg-primary text-xs hover:bg-primary/90"
+            >
+              <RefreshCw
+                className={buscar.isPending ? 'size-3.5 animate-spin' : 'size-3.5'}
+              />
+              {buscar.isPending ? 'Buscando...' : 'Buscar Vuelos'}
+            </Button>
+          )}
+        </div>
       </div>
 
       {isLoading && (
@@ -201,7 +237,27 @@ export function VuelosSection({ idViaje }: { idViaje: number }) {
         </p>
       )}
 
-      {data && data.length === 0 && !buscar.isPending && (
+      {/* Solo cuando terminó de cargar: si no, se muestra junto a los esqueletos y
+          desaparece al llegar vuelos guardados de antes. */}
+      {noIncluido && !isLoading && (!data || data.length === 0) && (
+        <Card className="space-y-3 border-dashed bg-muted/20 p-8 text-center">
+          <Lock className="mx-auto size-10 text-muted-foreground" />
+          <div className="space-y-1">
+            <p className="text-sm font-semibold">
+              Buscar vuelos no está incluido en el plan {miPlan?.nombrePlan}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Desde el plan Medio podés buscar vuelos de ida y vuelta para cada
+              viaje. Mientras tanto, podés seguir planificando sin elegir vuelo.
+            </p>
+          </div>
+          <Button asChild size="sm" variant="outline">
+            <Link href="/planes">Ver planes</Link>
+          </Button>
+        </Card>
+      )}
+
+      {!noIncluido && data && data.length === 0 && !buscar.isPending && (
         <Card className="space-y-3 border-dashed bg-muted/20 p-8 text-center">
           <PlaneTakeoff className="mx-auto size-10 text-muted-foreground" />
           <div className="space-y-1">

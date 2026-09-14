@@ -15,5 +15,10 @@ export const qk = {
   perfilMe: ['perfil', 'me'] as const,
   vuelos: (id: number) => ['viajes', id, 'vuelos'] as const,
   alojamiento: (id: number) => ['viajes', id, 'alojamiento'] as const,
+  planes: ['planes'] as const,
+  /** Prefijo común: invalidarlo refresca el uso general y el de todos los viajes. */
+  miPlanTodos: ['planes', 'mi-plan'] as const,
+  miPlan: (idViaje?: number) =>
+    ['planes', 'mi-plan', idViaje ?? 'general'] as const,
 };
 

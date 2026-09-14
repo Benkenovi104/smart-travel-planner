@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -54,6 +55,9 @@ import { useGenerarItinerario } from '@/lib/query/use-itinerario';
 import { useIntereses } from '@/lib/query/use-usuario';
 import { usePerfilMe } from '@/lib/query/use-perfil';
 import { ApiError } from '@/lib/api/client';
+import { useMiPlan } from '@/lib/query/use-planes';
+import { errorManejadoGlobal } from '@/lib/planes/errores';
+import { formatFecha } from '@/lib/format';
 import type { Viaje } from '@/lib/types/models';
 
 // Esquema de Zod para el Wizard
@@ -115,6 +119,7 @@ export function WizardNuevoViaje() {
   const { data: perfil } = usePerfilMe();
   const { data: todosIntereses } = useIntereses();
   const crearViaje = useCrearViaje();
+  const { data: miPlan } = useMiPlan();
   const [viajeCreado, setViajeCreado] = useState<Viaje | null>(null);
 
   const viajeIdActual = viajeCreado?.id ?? 0;
@@ -210,7 +215,9 @@ export function WizardNuevoViaje() {
       return nuevoViaje;
     } catch (e) {
       setCreandoBorradorBff(false);
-      toast.error(e instanceof ApiError ? e.message : 'No se pudo crear el borrador del viaje');
+      if (!errorManejadoGlobal(e)) {
+        toast.error(e instanceof ApiError ? e.message : 'No se pudo crear el borrador del viaje');
+      }
       return null;
     }
   }
@@ -273,7 +280,9 @@ export function WizardNuevoViaje() {
         setViajeCreado(targetViaje);
       } catch (e) {
         setCargandoIA(false);
-        toast.error(e instanceof ApiError ? e.message : 'No se pudo crear el viaje');
+        if (!errorManejadoGlobal(e)) {
+          toast.error(e instanceof ApiError ? e.message : 'No se pudo crear el viaje');
+        }
         return;
       }
     }
@@ -296,11 +305,13 @@ export function WizardNuevoViaje() {
       },
       onError: (e) => {
         setCargandoIA(false);
-        toast.error(
-          e instanceof ApiError
-            ? e.message
-            : 'No se pudo generar el itinerario por IA. El viaje quedó guardado.',
-        );
+        if (!errorManejadoGlobal(e)) {
+          toast.error(
+            e instanceof ApiError
+              ? e.message
+              : 'No se pudo generar el itinerario por IA. El viaje quedó guardado.',
+          );
+        }
         router.replace(`/viajes/${targetViaje!.id}`);
       },
     });
@@ -369,6 +380,25 @@ export function WizardNuevoViaje() {
           <span className={cn(paso >= 4 && 'text-primary font-semibold')}>4. Reservas</span>
         </div>
       </div>
+
+      {/* El viaje se crea (y cuenta para el plan) al pasar al paso 4. */}
+      {!viajeCreado && miPlan && miPlan.viajes.limite !== null && (
+        miPlan.viajes.usado >= miPlan.viajes.limite ? (
+          <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+            Ya usaste {miPlan.viajes.limite === 1 ? 'tu viaje' : `tus ${miPlan.viajes.limite} viajes`} de
+            este período: se renueva el {formatFecha(miPlan.periodoHasta)}.{' '}
+            <Link href="/planes" className="font-semibold underline">
+              Ver planes
+            </Link>
+          </p>
+        ) : (
+          <p className="rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2 text-xs text-slate-400">
+            Al llegar a Reservas, este viaje va a usar 1 de tus{' '}
+            {miPlan.viajes.limite} {miPlan.viajes.limite === 1 ? 'viaje' : 'viajes'} del
+            período ({miPlan.viajes.usado} usados).
+          </p>
+        )
+      )}
 
       {/* Card Contenedora de Formulario */}
       <Card className="shadow-lg border-muted/80">

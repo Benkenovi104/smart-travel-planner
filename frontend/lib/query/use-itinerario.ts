@@ -68,6 +68,7 @@ export function useItinerario(idViaje: number) {
 export function useGenerarItinerario(idViaje: number) {
   const qc = useQueryClient();
   return useMutation({
+    meta: { consumePlan: true },
     mutationFn: () => api.generarItinerario(idViaje),
     onSuccess: (data) => {
       qc.setQueryData(qk.itinerario(idViaje), data);
@@ -118,6 +119,7 @@ export function useEliminarActividad(idViaje: number) {
 export function useOptimizarDia(idViaje: number) {
   const qc = useQueryClient();
   return useMutation({
+    meta: { consumePlan: true },
     mutationFn: (idDia: number) => api.optimizarDia(idViaje, idDia),
     onSuccess: () => invalidarItinerario(qc, idViaje),
   });
