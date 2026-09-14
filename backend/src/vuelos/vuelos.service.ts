@@ -5,6 +5,8 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { PlanesService } from '../planes/planes.service.js';
+import { TipoConsumo } from '../../generated/prisma/enums.js';
 import { SkyScrapperService } from './sky-scrapper.service.js';
 import { PresupuestosService } from '../presupuestos/presupuestos.service.js';
 
@@ -16,12 +18,21 @@ export class VuelosService {
     private readonly prisma: PrismaService,
     private readonly skyScrapper: SkyScrapperService,
     private readonly presupuestos: PresupuestosService,
+    private readonly planes: PlanesService,
   ) {}
 
   async buscarYGuardar(id_usuario: number, id_viaje: number) {
     const viaje = await this.prisma.viaje.findUnique({ where: { id_viaje } });
     if (!viaje) throw new NotFoundException('Viaje no encontrado');
     if (viaje.id_usuario !== id_usuario) throw new ForbiddenException();
+
+    // Antes de pegarle a Sky Scrapper: cada búsqueda gasta 4 requests de una cuota
+    // que es de toda la app.
+    await this.planes.verificar(
+      id_usuario,
+      TipoConsumo.BUSCAR_VUELOS,
+      id_viaje,
+    );
 
     const [origen, destino] = await Promise.all([
       this.skyScrapper.resolverAeropuerto(viaje.origen),
@@ -110,15 +121,28 @@ export class VuelosService {
       };
     });
 
-    await this.prisma.$transaction(async (tx) => {
-      // Reemplazar las opciones descarta la que estuviera seleccionada, así que
-      // el presupuesto tiene que volver a calcularse sin ese vuelo.
-      await tx.opcionVuelo.deleteMany({ where: { id_viaje } });
-      if (opciones.length > 0) {
-        await tx.opcionVuelo.createMany({ data: opciones });
-      }
-      await this.presupuestos.recalcularConTx(tx, id_viaje);
-    });
+    await this.prisma.$transaction(
+      async (tx) => {
+        // Reemplazar las opciones descarta la que estuviera seleccionada, así que
+        // el presupuesto tiene que volver a calcularse sin ese vuelo.
+        await tx.opcionVuelo.deleteMany({ where: { id_viaje } });
+        if (opciones.length > 0) {
+          await tx.opcionVuelo.createMany({ data: opciones });
+          // Solo cuenta si trajo vuelos: una búsqueda vacía no le dio nada al
+          // usuario, y en el plan Medio es su única búsqueda del viaje.
+          await this.planes.registrar(
+            id_usuario,
+            TipoConsumo.BUSCAR_VUELOS,
+            id_viaje,
+            tx,
+          );
+        }
+        await this.presupuestos.recalcularConTx(tx, id_viaje);
+        // Borrar y crear opciones, registrar el consumo y recalcular el presupuesto
+        // son ~10 queries contra Supabase remoto: el default de 5 s queda justo.
+      },
+      { timeout: 20_000, maxWait: 10_000 },
+    );
 
     return this.listar(id_usuario, id_viaje);
   }

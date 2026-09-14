@@ -4,9 +4,10 @@ import { ItinerariosController } from './itinerarios.controller.js';
 import { GeminiService } from './gemini.service.js';
 import { PresupuestosModule } from '../presupuestos/presupuestos.module.js';
 import { LugaresModule } from '../lugares/lugares.module.js';
+import { PlanesModule } from '../planes/planes.module.js';
 
 @Module({
-  imports: [PresupuestosModule, LugaresModule],
+  imports: [PresupuestosModule, LugaresModule, PlanesModule],
   providers: [ItinerariosService, GeminiService],
   controllers: [ItinerariosController],
   exports: [ItinerariosService, GeminiService],

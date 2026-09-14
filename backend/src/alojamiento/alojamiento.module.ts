@@ -5,9 +5,10 @@ import { BookingService } from './booking.service.js';
 import { PresupuestosModule } from '../presupuestos/presupuestos.module.js';
 import { LugaresModule } from '../lugares/lugares.module.js';
 import { ItinerariosModule } from '../itinerarios/itinerarios.module.js';
+import { PlanesModule } from '../planes/planes.module.js';
 
 @Module({
-  imports: [PresupuestosModule, LugaresModule, ItinerariosModule],
+  imports: [PresupuestosModule, LugaresModule, ItinerariosModule, PlanesModule],
   providers: [AlojamientoService, BookingService],
   controllers: [AlojamientoController],
   exports: [AlojamientoService],

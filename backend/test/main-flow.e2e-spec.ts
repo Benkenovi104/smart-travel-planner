@@ -5,6 +5,7 @@ import { App } from 'supertest/types';
 import { describe, beforeAll, afterAll, it, expect } from '@jest/globals';
 import { AppModule } from './../src/app.module';
 import { PrismaExceptionFilter } from './../src/common/filters/prisma-exception.filter';
+import { PrismaService } from './../src/prisma/prisma.service';
 
 /**
  * E2E del flujo principal contra la base REAL (Supabase), con Gemini/Google
@@ -16,6 +17,7 @@ describe('Flujo principal (e2e)', () => {
   let http: App;
   let token: string;
   let idViaje: number;
+  let prisma: PrismaService;
 
   const email = `e2e_${Date.now()}@test.com`;
   const password = 'password123';
@@ -40,6 +42,7 @@ describe('Flujo principal (e2e)', () => {
     app.setGlobalPrefix('api');
     await app.init();
     http = app.getHttpServer();
+    prisma = moduleFixture.get(PrismaService);
   });
 
   afterAll(async () => {
@@ -93,6 +96,20 @@ describe('Flujo principal (e2e)', () => {
     idViaje = res.body.id_viaje;
   });
 
+  it('con un borrador abierto no deja crear otro viaje (409)', async () => {
+    const res = await request(http)
+      .post('/api/viajes')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        origen: 'Buenos Aires',
+        destino_principal: 'Mendoza',
+        fecha_inicio: '2026-10-10',
+        fecha_fin: '2026-10-12',
+      })
+      .expect(409);
+    expect(res.body).toMatchObject({ codigo: 'BORRADOR_EXISTENTE', idViaje });
+  });
+
   it(
     'generar itinerario con IA (Gemini real) -> 201 con días',
     async () => {
@@ -122,6 +139,40 @@ describe('Flujo principal (e2e)', () => {
     expect(Math.abs(suma - Number(res.body.monto_total))).toBeLessThan(0.01);
   });
 
+  it('plan Gratis: buscar vuelos no está incluido (403 LIMITE_PLAN)', async () => {
+    const res = await request(http)
+      .post(`/api/viajes/${idViaje}/vuelos/buscar`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(403);
+    expect(res.body).toMatchObject({
+      codigo: 'LIMITE_PLAN',
+      planActual: 'GRATIS',
+      planSugerido: 'MEDIO',
+    });
+  });
+
+  it('con plan Ilimitado asignado, mi-plan lo refleja', async () => {
+    const usuario = await prisma.usuario.findUniqueOrThrow({
+      where: { email },
+    });
+    const ahora = new Date();
+    await prisma.suscripcion.create({
+      data: {
+        id_usuario: usuario.id_usuario,
+        plan: 'ILIMITADO',
+        estado: 'ACTIVA',
+        dia_ancla: ahora,
+        vigente_desde: ahora,
+      },
+    });
+
+    const res = await request(http)
+      .get('/api/planes/mi-plan')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(res.body.plan).toBe('ILIMITADO');
+  });
+
   it('buscar vuelos (mock) -> guarda opciones ordenadas por precio', async () => {
     const res = await request(http)
       .post(`/api/viajes/${idViaje}/vuelos/buscar`)
@@ -133,14 +184,22 @@ describe('Flujo principal (e2e)', () => {
     expect([...precios].sort((a, b) => a - b)).toEqual(precios);
   });
 
-  it('buscar alojamiento (mock) -> guarda opciones ordenadas por precio/noche', async () => {
-    const res = await request(http)
-      .post(`/api/viajes/${idViaje}/alojamiento/buscar`)
-      .set('Authorization', `Bearer ${token}`)
-      .expect(201);
-    expect(Array.isArray(res.body)).toBe(true);
-    expect(res.body.length).toBeGreaterThan(0);
-  });
+  // Timeout propio, igual que generar: Booking va mockeado, pero el ranking usa
+  // Gemini real y cada hotel se enriquece con Google Places real. Con los 5 s por
+  // defecto, Jest abandona el test mientras el request sigue corriendo, y ese
+  // request después choca con el borrado de la cuenta del afterAll (deadlock).
+  it(
+    'buscar alojamiento (mock) -> guarda opciones ordenadas por precio/noche',
+    async () => {
+      const res = await request(http)
+        .post(`/api/viajes/${idViaje}/alojamiento/buscar`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(201);
+      expect(Array.isArray(res.body)).toBe(true);
+      expect(res.body.length).toBeGreaterThan(0);
+    },
+    120_000,
+  );
 
   it('IDOR: otro usuario no puede ver este viaje (403)', async () => {
     const otro = `e2e_otro_${Date.now()}@test.com`;

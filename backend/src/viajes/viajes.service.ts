@@ -3,8 +3,11 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { PlanesService } from '../planes/planes.service.js';
+import { TipoConsumo } from '../../generated/prisma/enums.js';
 import { PresupuestosService } from '../presupuestos/presupuestos.service.js';
 import { ItinerariosService } from '../itinerarios/itinerarios.service.js';
 import { Prisma } from '../../generated/prisma/client.js';
@@ -37,6 +40,7 @@ export class ViajesService {
     private readonly prisma: PrismaService,
     private readonly presupuestos: PresupuestosService,
     private readonly itinerarios: ItinerariosService,
+    private readonly planes: PlanesService,
   ) {}
 
   async create(id_usuario: number, dto: CreateViajeDto) {
@@ -48,26 +52,56 @@ export class ViajesService {
       );
     }
 
-    return this.prisma.viaje.create({
-      data: {
+    // Un solo borrador a la vez. El viaje cuenta para el plan al crearse (los
+    // pasos siguientes del wizard ya buscan vuelos y alojamiento), así que un
+    // wizard abandonado y vuelto a empezar gastaría otro viaje del período.
+    // Se chequea antes que el plan: retomar el borrador es la salida más útil.
+    const borrador = await this.prisma.viaje.findFirst({
+      where: { id_usuario, estado: 'borrador' },
+      select: { id_viaje: true },
+    });
+    if (borrador) {
+      throw new ConflictException({
+        statusCode: 409,
+        codigo: 'BORRADOR_EXISTENTE',
+        message:
+          'Ya tenés un viaje sin terminar. Retomalo antes de crear otro.',
+        idViaje: borrador.id_viaje,
+      });
+    }
+
+    await this.planes.verificar(id_usuario, TipoConsumo.CREAR_VIAJE);
+
+    // El viaje y su consumo se confirman juntos: si falla uno, no queda el otro.
+    return this.prisma.$transaction(async (tx) => {
+      const viaje = await tx.viaje.create({
+        data: {
+          id_usuario,
+          origen: data.origen,
+          destino_principal: data.destino_principal,
+          fechaInicio: new Date(data.fecha_inicio),
+          fechaFin: new Date(data.fecha_fin),
+          cantidadPersonas: data.cantidad_personas,
+          presupuestoTotal: data.presupuesto_total,
+          // Nace como borrador: el wizard de creación lo pasa a 'planificado'
+          // cuando el usuario termina de elegir vuelo y alojamiento.
+          estado: 'borrador',
+          fecha_creacion: new Date(),
+          ...(intereses?.length && {
+            viaje_intereses: {
+              create: intereses.map((id_interes) => ({ id_interes })),
+            },
+          }),
+        },
+        select: VIAJE_SELECT,
+      });
+      await this.planes.registrar(
         id_usuario,
-        origen: data.origen,
-        destino_principal: data.destino_principal,
-        fechaInicio: new Date(data.fecha_inicio),
-        fechaFin: new Date(data.fecha_fin),
-        cantidadPersonas: data.cantidad_personas,
-        presupuestoTotal: data.presupuesto_total,
-        // Nace como borrador: el wizard de creación lo pasa a 'planificado'
-        // cuando el usuario termina de elegir vuelo y alojamiento.
-        estado: 'borrador',
-        fecha_creacion: new Date(),
-        ...(intereses?.length && {
-          viaje_intereses: {
-            create: intereses.map((id_interes) => ({ id_interes })),
-          },
-        }),
-      },
-      select: VIAJE_SELECT,
+        TipoConsumo.CREAR_VIAJE,
+        viaje.id_viaje,
+        tx,
+      );
+      return viaje;
     });
   }
 
@@ -101,7 +135,9 @@ export class ViajesService {
     const fechaInicio = data.fecha_inicio
       ? new Date(data.fecha_inicio)
       : actual.fechaInicio;
-    const fechaFin = data.fecha_fin ? new Date(data.fecha_fin) : actual.fechaFin;
+    const fechaFin = data.fecha_fin
+      ? new Date(data.fecha_fin)
+      : actual.fechaFin;
 
     if (fechaFin < fechaInicio) {
       throw new BadRequestException(
@@ -116,51 +152,53 @@ export class ViajesService {
       fechaInicio.getTime() !== actual.fechaInicio.getTime() ||
       fechaFin.getTime() !== actual.fechaFin.getTime();
 
-    return this.prisma.$transaction(async (tx) => {
-      const viaje = await tx.viaje.update({
-        where: { id_viaje },
-        data: {
-          ...(data.origen && { origen: data.origen }),
-          ...(data.destino_principal && {
-            destino_principal: data.destino_principal,
-          }),
-          ...(data.fecha_inicio && { fechaInicio }),
-          ...(data.fecha_fin && { fechaFin }),
-          ...(data.cantidad_personas !== undefined && {
-            cantidadPersonas: data.cantidad_personas,
-          }),
-          ...(data.presupuesto_total !== undefined && {
-            presupuestoTotal: data.presupuesto_total,
-          }),
-          ...(data.estado && { estado: data.estado }),
-          ...(intereses && {
-            viaje_intereses: {
-              deleteMany: {},
-              create: intereses.map((id_interes) => ({ id_interes })),
-            },
-          }),
-        },
-        select: VIAJE_SELECT,
-      });
+    return this.prisma.$transaction(
+      async (tx) => {
+        const viaje = await tx.viaje.update({
+          where: { id_viaje },
+          data: {
+            ...(data.origen && { origen: data.origen }),
+            ...(data.destino_principal && {
+              destino_principal: data.destino_principal,
+            }),
+            ...(data.fecha_inicio && { fechaInicio }),
+            ...(data.fecha_fin && { fechaFin }),
+            ...(data.cantidad_personas !== undefined && {
+              cantidadPersonas: data.cantidad_personas,
+            }),
+            ...(data.presupuesto_total !== undefined && {
+              presupuestoTotal: data.presupuesto_total,
+            }),
+            ...(data.estado && { estado: data.estado }),
+            ...(intereses && {
+              viaje_intereses: {
+                deleteMany: {},
+                create: intereses.map((id_interes) => ({ id_interes })),
+              },
+            }),
+          },
+          select: VIAJE_SELECT,
+        });
 
-      if (cambianLasFechas) {
-        // Primero reajustar los días del itinerario (puede borrar días con sus
-        // actividades), después recalcular el presupuesto sobre lo que quedó.
-        await this.itinerarios.reajustarFechasEnTx(
-          tx,
-          id_viaje,
-          fechaInicio,
-          fechaFin,
-        );
-        await this.presupuestos.recalcularConTx(tx, id_viaje);
-      }
+        if (cambianLasFechas) {
+          // Primero reajustar los días del itinerario (puede borrar días con sus
+          // actividades), después recalcular el presupuesto sobre lo que quedó.
+          await this.itinerarios.reajustarFechasEnTx(
+            tx,
+            id_viaje,
+            fechaInicio,
+            fechaFin,
+          );
+          await this.presupuestos.recalcularConTx(tx, id_viaje);
+        }
 
-      return viaje;
-    },
-    // Reajustar el itinerario + recalcular el presupuesto son muchas queries
-    // secuenciales; contra una base remota (Supabase) el default de 5s de la
-    // transacción no alcanza. Mismo criterio que `generar` en itinerarios.
-    { timeout: 20_000, maxWait: 10_000 });
+        return viaje;
+      },
+      // Reajustar el itinerario + recalcular el presupuesto son muchas queries
+      // secuenciales; contra una base remota (Supabase) el default de 5s de la
+      // transacción no alcanza. Mismo criterio que `generar` en itinerarios.
+      { timeout: 20_000, maxWait: 10_000 },
+    );
   }
 
   async remove(id_usuario: number, id_viaje: number) {

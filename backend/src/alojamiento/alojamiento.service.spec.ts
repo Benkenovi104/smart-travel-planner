@@ -11,6 +11,8 @@ import { BookingService } from './booking.service.js';
 import { PresupuestosService } from '../presupuestos/presupuestos.service.js';
 import { GooglePlacesService } from '../lugares/google-places.service.js';
 import { GeminiService } from '../itinerarios/gemini.service.js';
+import { PlanesService } from '../planes/planes.service.js';
+import { LimitePlanException } from '../planes/limite-plan.exception.js';
 
 describe('AlojamientoService', () => {
   let service: AlojamientoService;
@@ -19,6 +21,7 @@ describe('AlojamientoService', () => {
   let presupuestos: any;
   let googlePlaces: any;
   let gemini: any;
+  let planes: any;
 
   // Un hotel como lo devuelve GooglePlacesService.buscarAlojamientosGoogle().
   const hotel = (id: string, rating: number | null) => ({
@@ -66,6 +69,7 @@ describe('AlojamientoService', () => {
     googlePlaces.buscarDetalleHotel.mockResolvedValue(null);
     gemini = { sugerirAlojamientos: jest.fn() };
     gemini.sugerirAlojamientos.mockResolvedValue([]);
+    planes = { verificar: jest.fn(), registrar: jest.fn() };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AlojamientoService,
@@ -74,6 +78,7 @@ describe('AlojamientoService', () => {
         { provide: PresupuestosService, useValue: presupuestos },
         { provide: GooglePlacesService, useValue: googlePlaces },
         { provide: GeminiService, useValue: gemini },
+        { provide: PlanesService, useValue: planes },
       ],
     }).compile();
     service = module.get<AlojamientoService>(AlojamientoService);
@@ -347,6 +352,57 @@ describe('AlojamientoService', () => {
           hotelesDisponibles: [expect.objectContaining({ precioPorNoche: 50 })],
         }),
       );
+    });
+  });
+
+  describe('plan', () => {
+    it('si el plan no permite buscar alojamiento, no le pega a Booking ni a Places', async () => {
+      prisma.viaje.findUnique.mockResolvedValue(viaje);
+      planes.verificar.mockRejectedValue(
+        new LimitePlanException({
+          message: 'Tu plan Gratis incluye 1 búsqueda de alojamiento por viaje.',
+          accion: 'BUSCAR_ALOJAMIENTO',
+          planActual: 'GRATIS',
+          planSugerido: 'MEDIO',
+          limite: 1,
+          usado: 1,
+          renuevaEl: null,
+        }),
+      );
+
+      await expect(service.buscarYGuardar(1, 5)).rejects.toBeInstanceOf(
+        LimitePlanException,
+      );
+      expect(planes.verificar).toHaveBeenCalledWith(1, 'BUSCAR_ALOJAMIENTO', 5);
+      expect(booking.resolverDestino).not.toHaveBeenCalled();
+      expect(googlePlaces.buscarAlojamientosGoogle).not.toHaveBeenCalled();
+    });
+
+    it('registra el consumo dentro de la transacción al guardar opciones', async () => {
+      prisma.viaje.findUnique.mockResolvedValue(viaje);
+      prisma.opcionAlojamiento.findMany.mockResolvedValue([]);
+      booking.resolverDestino.mockResolvedValue({ destId: 'X', searchType: 'city' });
+      booking.buscarHoteles.mockResolvedValue([
+        { nombre: 'Ibis', precioTotal: 150, rating: 8, latitud: null, longitud: null },
+      ]);
+      const tx = {
+        opcionAlojamiento: { deleteMany: jest.fn(), createMany: jest.fn() },
+      };
+      prisma.$transaction.mockImplementation(async (cb: any) => cb(tx));
+
+      await service.buscarYGuardar(1, 5);
+
+      expect(planes.registrar).toHaveBeenCalledWith(1, 'BUSCAR_ALOJAMIENTO', 5, tx);
+    });
+
+    it('si no encuentra ningún alojamiento, no registra consumo', async () => {
+      prisma.viaje.findUnique.mockResolvedValue(viaje);
+      booking.resolverDestino.mockResolvedValue(null);
+
+      await expect(service.buscarYGuardar(1, 5)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(planes.registrar).not.toHaveBeenCalled();
     });
   });
 

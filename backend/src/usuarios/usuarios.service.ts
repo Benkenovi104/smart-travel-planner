@@ -170,22 +170,51 @@ export class UsuariosService {
     const passwordOk = await bcrypt.compare(password, usuario.password_hash);
     if (!passwordOk) throw new UnauthorizedException('Contraseña incorrecta');
 
+    // Mercado Pago sigue cobrando una suscripción aunque se borre la cuenta, y
+    // después ya no habría forma de cancelarla desde la app.
+    const suscripcionCobrada = await this.prisma.suscripcion.findFirst({
+      where: {
+        id_usuario,
+        mp_preapproval_id: { not: null },
+        estado: { in: ['ACTIVA', 'EN_GRACIA'] },
+      },
+      select: { id_suscripcion: true },
+    });
+    if (suscripcionCobrada) {
+      throw new ConflictException(
+        'Tenés una suscripción paga activa. Cancelala antes de eliminar la cuenta.',
+      );
+    }
+
     // Cascade manual completo (el schema usa onDelete: NoAction): primero los
     // viajes con todos sus hijos, después perfil e intereses, y al final el
     // usuario. Todo en una transacción para no dejar la cuenta a medio borrar.
-    await this.prisma.$transaction(async (tx) => {
-      const viajes = await tx.viaje.findMany({
-        where: { id_usuario },
-        select: { id_viaje: true },
-      });
-      for (const { id_viaje } of viajes) {
-        await ViajesService.cascadeDeleteEnTx(tx, id_viaje);
-      }
+    await this.prisma.$transaction(
+      async (tx) => {
+        const viajes = await tx.viaje.findMany({
+          where: { id_usuario },
+          select: { id_viaje: true },
+        });
+        for (const { id_viaje } of viajes) {
+          await ViajesService.cascadeDeleteEnTx(tx, id_viaje);
+        }
 
-      await tx.perfilViajero.deleteMany({ where: { id_usuario } });
-      await tx.usuarioInteres.deleteMany({ where: { id_usuario } });
-      await tx.usuario.delete({ where: { id_usuario } });
-    });
+        // Datos del plan: sin FK en cascada, quedarían huérfanos. Pagos antes que
+        // suscripciones, porque apuntan a ellas.
+        await tx.consumo.deleteMany({ where: { id_usuario } });
+        await tx.pagoSuscripcion.deleteMany({
+          where: { suscripciones: { id_usuario } },
+        });
+        await tx.suscripcion.deleteMany({ where: { id_usuario } });
+
+        await tx.perfilViajero.deleteMany({ where: { id_usuario } });
+        await tx.usuarioInteres.deleteMany({ where: { id_usuario } });
+        await tx.usuario.delete({ where: { id_usuario } });
+        // El cascade de un viaje con itinerario generado ya tardó 3,5 s medido contra
+        // Supabase: con el default de 5 s, un par de viajes más lo hace fallar.
+      },
+      { timeout: 30_000, maxWait: 10_000 },
+    );
 
     return { message: 'Cuenta eliminada correctamente' };
   }

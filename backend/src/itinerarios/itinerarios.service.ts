@@ -7,6 +7,8 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { PlanesService } from '../planes/planes.service.js';
+import { TipoConsumo } from '../../generated/prisma/enums.js';
 import { Prisma, Lugar } from '../../generated/prisma/client.js';
 import { GeminiService } from './gemini.service.js';
 import { PresupuestosService } from '../presupuestos/presupuestos.service.js';
@@ -65,7 +67,8 @@ function dist2<T extends Punto>(a: T, b: T): number {
 /** Largo total de un recorrido abierto (suma de tramos consecutivos). */
 function largoRuta<T extends Punto>(ruta: T[]): number {
   let total = 0;
-  for (let i = 1; i < ruta.length; i++) total += Math.sqrt(dist2(ruta[i - 1], ruta[i]));
+  for (let i = 1; i < ruta.length; i++)
+    total += Math.sqrt(dist2(ruta[i - 1], ruta[i]));
   return total;
 }
 
@@ -205,6 +208,7 @@ export class ItinerariosService {
     private readonly presupuestos: PresupuestosService,
     private readonly lugares: LugaresService,
     private readonly geocoding: GeocodingService,
+    private readonly planes: PlanesService,
   ) {}
 
   private static readonly MS_POR_DIA = 24 * 60 * 60 * 1000;
@@ -301,6 +305,17 @@ export class ItinerariosService {
 
     if (!viaje) throw new NotFoundException('Viaje no encontrado');
     if (viaje.id_usuario !== id_usuario) throw new ForbiddenException();
+
+    // Generar y regenerar son el mismo endpoint pero cuentan distinto para el
+    // plan, y hay que saber cuál es ANTES de gastar en Google Places y Gemini.
+    const itinerarioExistente = await this.prisma.itinerario.findUnique({
+      where: { id_viaje },
+      select: { id_itinerario: true },
+    });
+    const accion = itinerarioExistente
+      ? TipoConsumo.REGENERAR_ITINERARIO
+      : TipoConsumo.GENERAR_ITINERARIO;
+    await this.planes.verificar(id_usuario, accion, id_viaje);
 
     // Preparar parámetros para la IA
     const intereses = viaje.viaje_intereses.map((vi) => vi.intereses.nombre);
@@ -455,6 +470,8 @@ export class ItinerariosService {
         }
 
         await this.presupuestos.recalcularConTx(tx, id_viaje);
+        // Recién acá: si Gemini o la escritura fallaron, el intento no se pierde.
+        await this.planes.registrar(id_usuario, accion, id_viaje, tx);
       },
       { timeout: 30_000, maxWait: 10_000 },
     );
@@ -808,125 +825,147 @@ export class ItinerariosService {
       id_usuario,
       id_viaje,
     );
+    // Después del chequeo de propiedad: el plan de un viaje ajeno no es asunto
+    // del que pregunta.
+    await this.planes.verificar(
+      id_usuario,
+      TipoConsumo.OPTIMIZAR_DIA,
+      id_viaje,
+    );
 
-    return this.prisma.$transaction(async (tx) => {
-      const dia = await this.obtenerDia(tx, itinerario.id_itinerario, id_dia);
+    // Con timeout propio: en un día de ~10 paradas son ~13 queries seguidas contra
+    // Supabase remoto, y el default de 5 s de Prisma dispara P2028.
+    return this.prisma.$transaction(
+      async (tx) => {
+        const dia = await this.obtenerDia(tx, itinerario.id_itinerario, id_dia);
 
-      const actividades = await tx.actividadItinerario.findMany({
-        where: { id_dia_itinerario: id_dia },
-        orderBy: { orden: 'asc' },
-        include: { lugares: true },
-      });
+        const actividades = await tx.actividadItinerario.findMany({
+          where: { id_dia_itinerario: id_dia },
+          orderBy: { orden: 'asc' },
+          include: { lugares: true },
+        });
 
-      const conCoords = actividades.filter(
-        (a) => a.lugares.latitud != null && a.lugares.longitud != null,
-      );
-      if (conCoords.length < 3) {
-        // Con 0-2 paradas ubicadas no hay recorrido que optimizar.
-        throw new BadRequestException(
-          'Se necesitan al menos 3 actividades con ubicación para optimizar el recorrido',
+        const conCoords = actividades.filter(
+          (a) => a.lugares.latitud != null && a.lugares.longitud != null,
         );
-      }
+        if (conCoords.length < 3) {
+          // Con 0-2 paradas ubicadas no hay recorrido que optimizar.
+          throw new BadRequestException(
+            'Se necesitan al menos 3 actividades con ubicación para optimizar el recorrido',
+          );
+        }
 
-      // Los "transporte" son traslados entre zonas, no destinos: se geolocalizan
-      // de forma ambigua (a veces al centro de la ciudad de origen), así que no
-      // se optimizan como paradas; se reinsertan en los límites entre zonas.
-      const esTraslado = (a: (typeof actividades)[number]) =>
-        a.tipo_actividad === 'transporte';
-      const traslados = actividades.filter(esTraslado);
-      const sinUbicacion = actividades.filter(
-        (a) =>
-          !esTraslado(a) &&
-          (a.lugares.latitud == null || a.lugares.longitud == null),
-      );
-
-      const puntos = actividades
-        .filter(
+        // Los "transporte" son traslados entre zonas, no destinos: se geolocalizan
+        // de forma ambigua (a veces al centro de la ciudad de origen), así que no
+        // se optimizan como paradas; se reinsertan en los límites entre zonas.
+        const esTraslado = (a: (typeof actividades)[number]) =>
+          a.tipo_actividad === 'transporte';
+        const traslados = actividades.filter(esTraslado);
+        const sinUbicacion = actividades.filter(
           (a) =>
             !esTraslado(a) &&
-            a.lugares.latitud != null &&
-            a.lugares.longitud != null,
-        )
-        .map((a) => ({
-          act: a,
-          lat: Number(a.lugares.latitud),
-          lng: Number(a.lugares.longitud),
-        }));
+            (a.lugares.latitud == null || a.lugares.longitud == null),
+        );
 
-      // Agrupar los destinos por zona, ordenar las zonas (arrancando por la del
-      // primer destino) y optimizar el recorrido dentro de cada una.
-      const zonas = puntos.length
-        ? ordenarClusters(clusterizar(puntos), puntos[0])
-        : [];
-      const bloques = zonas.map((z) => dosOpt(nearestNeighbor(z)).map((p) => p.act));
+        const puntos = actividades
+          .filter(
+            (a) =>
+              !esTraslado(a) &&
+              a.lugares.latitud != null &&
+              a.lugares.longitud != null,
+          )
+          .map((a) => ({
+            act: a,
+            lat: Number(a.lugares.latitud),
+            lng: Number(a.lugares.longitud),
+          }));
 
-      // Armar la secuencia: cada bloque de zona, y en el cruce a la zona siguiente
-      // se mete un traslado. Los traslados que sobran (típicamente el "regreso")
-      // van al final; las actividades sin ubicación, al final de todo.
-      const cola = [...traslados];
-      const nuevoOrden: typeof actividades = [];
-      bloques.forEach((bloque, i) => {
-        nuevoOrden.push(...bloque);
-        if (i < bloques.length - 1 && cola.length) {
-          nuevoOrden.push(cola.shift()!);
+        // Agrupar los destinos por zona, ordenar las zonas (arrancando por la del
+        // primer destino) y optimizar el recorrido dentro de cada una.
+        const zonas = puntos.length
+          ? ordenarClusters(clusterizar(puntos), puntos[0])
+          : [];
+        const bloques = zonas.map((z) =>
+          dosOpt(nearestNeighbor(z)).map((p) => p.act),
+        );
+
+        // Armar la secuencia: cada bloque de zona, y en el cruce a la zona siguiente
+        // se mete un traslado. Los traslados que sobran (típicamente el "regreso")
+        // van al final; las actividades sin ubicación, al final de todo.
+        const cola = [...traslados];
+        const nuevoOrden: typeof actividades = [];
+        bloques.forEach((bloque, i) => {
+          nuevoOrden.push(...bloque);
+          if (i < bloques.length - 1 && cola.length) {
+            nuevoOrden.push(cola.shift()!);
+          }
+        });
+        nuevoOrden.push(...cola, ...sinUbicacion);
+
+        // Los horarios del día son la "plantilla" que se reasigna a la nueva
+        // secuencia. Se ordenan de menor a mayor (las actividades sin hora al
+        // final) para que el recorrido optimizado quede cronológico: la primera
+        // parada con la hora más temprana y sin que una hora más tarde caiga antes
+        // de una más temprana.
+        const franjas = actividades
+          .map((a) => ({
+            inicio: a.hora_inicio_estimada,
+            fin: a.hora_fin_estimada,
+          }))
+          .sort((x, y) => {
+            if (!x.inicio) return y.inicio ? 1 : 0;
+            if (!y.inicio) return -1;
+            return x.inicio.getTime() - y.inicio.getTime();
+          });
+
+        // Sin cambios sólo si cada posición queda igual: misma actividad Y misma
+        // hora. Así también reordena los horarios cuando el orden espacial ya era
+        // óptimo pero las horas estaban desordenadas (p. ej. tras arrastrar a mano).
+        const t = (d: Date | null) => d?.getTime() ?? null;
+        const sinCambios = nuevoOrden.every(
+          (a, i) =>
+            a.id_actividad === actividades[i].id_actividad &&
+            t(a.hora_inicio_estimada) === t(franjas[i].inicio),
+        );
+        if (sinCambios) {
+          return { optimizada: false, actividades };
         }
-      });
-      nuevoOrden.push(...cola, ...sinUbicacion);
 
-      // Los horarios del día son la "plantilla" que se reasigna a la nueva
-      // secuencia. Se ordenan de menor a mayor (las actividades sin hora al
-      // final) para que el recorrido optimizado quede cronológico: la primera
-      // parada con la hora más temprana y sin que una hora más tarde caiga antes
-      // de una más temprana.
-      const franjas = actividades
-        .map((a) => ({
-          inicio: a.hora_inicio_estimada,
-          fin: a.hora_fin_estimada,
-        }))
-        .sort((x, y) => {
-          if (!x.inicio) return y.inicio ? 1 : 0;
-          if (!y.inicio) return -1;
-          return x.inicio.getTime() - y.inicio.getTime();
+        for (let i = 0; i < nuevoOrden.length; i++) {
+          await tx.actividadItinerario.update({
+            where: { id_actividad: nuevoOrden[i].id_actividad },
+            data: {
+              orden: i + 1,
+              hora_inicio_estimada: franjas[i].inicio,
+              hora_fin_estimada: franjas[i].fin,
+            },
+          });
+        }
+
+        // Solo si reordenó: el camino "sin cambios" vuelve antes sin escribir nada.
+        await this.planes.registrar(
+          id_usuario,
+          TipoConsumo.OPTIMIZAR_DIA,
+          id_viaje,
+          tx,
+        );
+
+        await this.registrarCambio(
+          tx,
+          itinerario.id_itinerario,
+          'optimizar_dia',
+          `Se optimizó el recorrido del día ${dia.numeroDia}`,
+        );
+
+        const actualizadas = await tx.actividadItinerario.findMany({
+          where: { id_dia_itinerario: id_dia },
+          orderBy: { orden: 'asc' },
+          include: { lugares: true },
         });
-
-      // Sin cambios sólo si cada posición queda igual: misma actividad Y misma
-      // hora. Así también reordena los horarios cuando el orden espacial ya era
-      // óptimo pero las horas estaban desordenadas (p. ej. tras arrastrar a mano).
-      const t = (d: Date | null) => d?.getTime() ?? null;
-      const sinCambios = nuevoOrden.every(
-        (a, i) =>
-          a.id_actividad === actividades[i].id_actividad &&
-          t(a.hora_inicio_estimada) === t(franjas[i].inicio),
-      );
-      if (sinCambios) {
-        return { optimizada: false, actividades };
-      }
-
-      for (let i = 0; i < nuevoOrden.length; i++) {
-        await tx.actividadItinerario.update({
-          where: { id_actividad: nuevoOrden[i].id_actividad },
-          data: {
-            orden: i + 1,
-            hora_inicio_estimada: franjas[i].inicio,
-            hora_fin_estimada: franjas[i].fin,
-          },
-        });
-      }
-
-      await this.registrarCambio(
-        tx,
-        itinerario.id_itinerario,
-        'optimizar_dia',
-        `Se optimizó el recorrido del día ${dia.numeroDia}`,
-      );
-
-      const actualizadas = await tx.actividadItinerario.findMany({
-        where: { id_dia_itinerario: id_dia },
-        orderBy: { orden: 'asc' },
-        include: { lugares: true },
-      });
-      return { optimizada: true, actividades: actualizadas };
-    });
+        return { optimizada: true, actividades: actualizadas };
+      },
+      { timeout: 20_000, maxWait: 10_000 },
+    );
   }
 
   async getHistorialCambios(id_usuario: number, id_viaje: number) {

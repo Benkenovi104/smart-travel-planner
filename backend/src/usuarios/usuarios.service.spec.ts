@@ -17,6 +17,7 @@ describe('UsuariosService', () => {
   beforeEach(async () => {
     prisma = {
       usuario: { findUnique: jest.fn(), delete: jest.fn() },
+      suscripcion: { findFirst: jest.fn(async () => null) },
       interes: { findUnique: jest.fn() },
       usuarioInteres: {
         findUnique: jest.fn(),
@@ -63,6 +64,9 @@ describe('UsuariosService', () => {
         perfilViajero: { deleteMany: jest.fn() },
         usuarioInteres: { deleteMany: jest.fn() },
         usuario: { delete: jest.fn() },
+        consumo: { deleteMany: jest.fn() },
+        pagoSuscripcion: { deleteMany: jest.fn() },
+        suscripcion: { deleteMany: jest.fn() },
       };
       prisma.$transaction.mockImplementation(async (cb: any) => cb(tx));
       const cascadeSpy = jest
@@ -84,6 +88,39 @@ describe('UsuariosService', () => {
       expect(tx.usuario.delete).toHaveBeenCalledWith({
         where: { id_usuario: 1 },
       });
+      // Los datos del plan también: sin FK en cascada quedarían huérfanos.
+      expect(tx.consumo.deleteMany).toHaveBeenCalledWith({
+        where: { id_usuario: 1 },
+      });
+      expect(tx.pagoSuscripcion.deleteMany).toHaveBeenCalledWith({
+        where: { suscripciones: { id_usuario: 1 } },
+      });
+      expect(tx.suscripcion.deleteMany).toHaveBeenCalledWith({
+        where: { id_usuario: 1 },
+      });
+    });
+
+    it('con una suscripción cobrada por Mercado Pago activa, no borra nada', async () => {
+      const hash = await bcrypt.hash('correcta', 4);
+      prisma.usuario.findUnique.mockResolvedValue({
+        id_usuario: 1,
+        password_hash: hash,
+      });
+      prisma.suscripcion.findFirst.mockResolvedValue({ id_suscripcion: 4 });
+
+      await expect(service.deleteMe(1, 'correcta')).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(prisma.suscripcion.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            id_usuario: 1,
+            mp_preapproval_id: { not: null },
+            estado: { in: ['ACTIVA', 'EN_GRACIA'] },
+          },
+        }),
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
   });
 

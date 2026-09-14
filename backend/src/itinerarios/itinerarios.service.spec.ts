@@ -12,27 +12,108 @@ import { GeminiService } from './gemini.service.js';
 import { PresupuestosService } from '../presupuestos/presupuestos.service.js';
 import { LugaresService } from '../lugares/lugares.service.js';
 import { GeocodingService } from '../lugares/geocoding.service.js';
+import { PlanesService } from '../planes/planes.service.js';
+import { LimitePlanException } from '../planes/limite-plan.exception.js';
+
+const limite = (accion: 'GENERAR_ITINERARIO' | 'REGENERAR_ITINERARIO' | 'OPTIMIZAR_DIA') =>
+  new LimitePlanException({
+    message: 'No incluido en el plan Gratis.',
+    accion,
+    planActual: 'GRATIS',
+    planSugerido: 'MEDIO',
+    limite: 0,
+    usado: 0,
+    renuevaEl: null,
+  });
 
 describe('ItinerariosService', () => {
   let service: ItinerariosService;
   let prisma: any;
+  let planes: any;
+  let gemini: any;
+  let lugares: any;
 
   beforeEach(async () => {
     prisma = {
       viaje: { findUnique: jest.fn() },
       itinerario: { findUnique: jest.fn() },
     };
+    planes = { verificar: jest.fn(), registrar: jest.fn() };
+    gemini = { generarItinerario: jest.fn() };
+    lugares = { buscarYCachear: jest.fn() };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ItinerariosService,
         { provide: PrismaService, useValue: prisma },
-        { provide: GeminiService, useValue: { generarItinerario: jest.fn() } },
+        { provide: GeminiService, useValue: gemini },
         { provide: PresupuestosService, useValue: { recalcularConTx: jest.fn() } },
-        { provide: LugaresService, useValue: { buscarYCachear: jest.fn() } },
+        { provide: LugaresService, useValue: lugares },
         { provide: GeocodingService, useValue: { geocodificar: jest.fn() } },
+        { provide: PlanesService, useValue: planes },
       ],
     }).compile();
     service = module.get<ItinerariosService>(ItinerariosService);
+  });
+
+  describe('generar (plan)', () => {
+    const viaje = {
+      id_viaje: 5,
+      id_usuario: 1,
+      origen: 'Buenos Aires',
+      destino_principal: 'Mendoza',
+      fechaInicio: new Date('2026-09-10'),
+      fechaFin: new Date('2026-09-12'),
+      cantidadPersonas: 2,
+      presupuestoTotal: 1000,
+      viaje_intereses: [],
+      usuarios: { perfil_viajero: null },
+    };
+
+    beforeEach(() => {
+      prisma.viaje.findUnique.mockResolvedValue(viaje);
+      lugares.buscarYCachear.mockResolvedValue([]);
+      // Se corta en Gemini: alcanza para ver qué se verificó antes de gastar.
+      gemini.generarItinerario.mockRejectedValue(new Error('Gemini caído'));
+    });
+
+    it('sin itinerario previo verifica GENERAR antes de llamar a Gemini', async () => {
+      prisma.itinerario.findUnique.mockResolvedValue(null);
+
+      await expect(service.generar(1, 5)).rejects.toThrow('Gemini caído');
+
+      expect(planes.verificar).toHaveBeenCalledWith(1, 'GENERAR_ITINERARIO', 5);
+    });
+
+    it('con itinerario previo lo cuenta como regenerar', async () => {
+      prisma.itinerario.findUnique.mockResolvedValue({ id_itinerario: 1 });
+
+      await expect(service.generar(1, 5)).rejects.toThrow('Gemini caído');
+
+      expect(planes.verificar).toHaveBeenCalledWith(
+        1,
+        'REGENERAR_ITINERARIO',
+        5,
+      );
+    });
+
+    it('si Gemini falla, el usuario no pierde el intento', async () => {
+      prisma.itinerario.findUnique.mockResolvedValue(null);
+
+      await expect(service.generar(1, 5)).rejects.toThrow();
+
+      expect(planes.registrar).not.toHaveBeenCalled();
+    });
+
+    it('si el plan no lo permite, no gasta en Google Places ni en Gemini', async () => {
+      prisma.itinerario.findUnique.mockResolvedValue({ id_itinerario: 1 });
+      planes.verificar.mockRejectedValue(limite('REGENERAR_ITINERARIO'));
+
+      await expect(service.generar(1, 5)).rejects.toBeInstanceOf(
+        LimitePlanException,
+      );
+      expect(lugares.buscarYCachear).not.toHaveBeenCalled();
+      expect(gemini.generarItinerario).not.toHaveBeenCalled();
+    });
   });
 
   describe('getItinerario (guards)', () => {
@@ -282,6 +363,41 @@ describe('ItinerariosService', () => {
       await expect(service.optimizarDia(1, 5, 20)).rejects.toBeInstanceOf(
         BadRequestException,
       );
+    });
+
+    it('verifica que el plan incluya optimizar y registra el consumo al reordenar', async () => {
+      const { tx } = mockTx(actividadesZigzag());
+
+      await service.optimizarDia(1, 5, 20);
+
+      expect(planes.verificar).toHaveBeenCalledWith(1, 'OPTIMIZAR_DIA', 5);
+      expect(planes.registrar).toHaveBeenCalledWith(1, 'OPTIMIZAR_DIA', 5, tx);
+    });
+
+    it('si no había nada que cambiar, no registra consumo', async () => {
+      // Ya en el orden óptimo (A, C, D, B) y con las horas cronológicas.
+      const [a, b, c, d] = actividadesZigzag();
+      mockTx([
+        { ...a, orden: 1 },
+        { ...c, orden: 2, hora_inicio_estimada: hora(10), hora_fin_estimada: hora(11) },
+        { ...d, orden: 3, hora_inicio_estimada: hora(11), hora_fin_estimada: hora(12) },
+        { ...b, orden: 4, hora_inicio_estimada: hora(12), hora_fin_estimada: hora(13) },
+      ]);
+
+      const res = await service.optimizarDia(1, 5, 20);
+
+      expect(res.optimizada).toBe(false);
+      expect(planes.registrar).not.toHaveBeenCalled();
+    });
+
+    it('si el plan no incluye optimizar, no abre la transacción', async () => {
+      mockTx(actividadesZigzag());
+      planes.verificar.mockRejectedValue(limite('OPTIMIZAR_DIA'));
+
+      await expect(service.optimizarDia(1, 5, 20)).rejects.toBeInstanceOf(
+        LimitePlanException,
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
   });
 
