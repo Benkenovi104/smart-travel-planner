@@ -20,6 +20,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   const [queryClient] = useState(() => {
+    // Varias queries pueden dar 401 a la vez: se cierra la sesión una sola vez.
+    let cerrandoSesion = false;
+
     const qc: QueryClient = new QueryClient({
       /**
        * Un 401 leyendo datos significa que el JWT venció, es inválido o la cuenta
@@ -37,11 +40,21 @@ export function Providers({ children }: { children: React.ReactNode }) {
           // Se lee al momento del error: el QueryClient se crea una sola vez y
           // cualquier `pathname` capturado en el closure quedaría viejo.
           const actual = window.location.pathname;
-          if (actual.startsWith('/login')) return;
+          if (actual.startsWith('/login') || cerrandoSesion) return;
+          cerrandoSesion = true;
 
           qc.clear();
           toast.error('Tu sesión expiró. Iniciá sesión de nuevo.');
-          router.replace(`/login?next=${encodeURIComponent(actual)}`);
+          // Primero se borra la cookie: si no, proxy.ts la ve en /login y devuelve
+          // al usuario a la ruta privada, que vuelve a dar 401, en loop (pasa con
+          // un JWT vencido o de una cuenta borrada), y el loop agota el rate limit
+          // del backend y deja todo en 429.
+          void fetch('/api/auth/logout', { method: 'POST' })
+            .catch(() => undefined)
+            .finally(() => {
+              cerrandoSesion = false;
+              router.replace(`/login?next=${encodeURIComponent(actual)}`);
+            });
         },
       }),
       /**
