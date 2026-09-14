@@ -238,7 +238,9 @@ export class SuscripcionesService {
         return this.sincronizar(idRecurso);
       case 'subscription_authorized_payment': {
         const cobro = await this.mercadoPago.obtenerCobro(idRecurso);
-        if (!cobro.idSuscripcionMp) return;
+        // Sin cobro válido no se sabe de qué suscripción es: la próxima
+        // notificación o sincronización lo va a traer completo.
+        if (!cobro?.idSuscripcionMp) return;
         return this.sincronizar(cobro.idSuscripcionMp, [cobro]);
       }
       default:

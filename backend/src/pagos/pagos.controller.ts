@@ -89,7 +89,14 @@ export class PagosController {
     const parametros = new URLSearchParams();
     for (const [clave, valor] of Object.entries(query)) {
       const v = primero(valor);
-      if (v !== undefined) parametros.set(clave, v);
+      if (v === undefined) continue;
+      // Mercado Pago agrega sus parámetros con "?" aunque la URL ya tenga query:
+      // "idSuscripcion=21?preapproval_id=abc" llega como un solo valor.
+      const [propio, ...agregados] = v.split('?');
+      parametros.set(clave, propio);
+      for (const [k, extra] of new URLSearchParams(agregados.join('&'))) {
+        parametros.set(k, extra);
+      }
     }
     const frontend = process.env.FRONTEND_URL ?? 'http://localhost:3001';
     const qs = parametros.toString();

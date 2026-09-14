@@ -28,8 +28,13 @@ const ESPERA_MAXIMA_MS = 60_000;
 
 const sinSuscribirse = () => () => {};
 
+/**
+ * El id de la suscripción. Mercado Pago agrega sus parámetros con `?` aunque la
+ * URL de retorno ya tenga query (`?idSuscripcion=21?preapproval_id=...`), así que
+ * se toman solo los dígitos del principio.
+ */
 function aId(valor: string | null): number | null {
-  const n = Number(valor);
+  const n = Number(valor?.match(/^\d+/)?.[0]);
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 

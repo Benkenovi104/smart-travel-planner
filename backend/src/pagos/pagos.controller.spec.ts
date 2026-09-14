@@ -82,4 +82,16 @@ describe('PagosController', () => {
       statusCode: 302,
     });
   });
+
+  it('separa los parámetros que Mercado Pago agrega con "?" a una URL que ya tenía query', () => {
+    // Visto en el sandbox: volvió a /pagos/volver?idSuscripcion=21?preapproval_id=...
+    process.env.FRONTEND_URL = 'http://localhost:3001';
+
+    expect(
+      controller.volver({ idSuscripcion: '21?preapproval_id=mp-1' }),
+    ).toEqual({
+      url: 'http://localhost:3001/planes/resultado?idSuscripcion=21&preapproval_id=mp-1',
+      statusCode: 302,
+    });
+  });
 });

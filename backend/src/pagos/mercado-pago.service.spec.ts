@@ -157,4 +157,38 @@ describe('MercadoPagoService', () => {
       search.mockRestore();
     }
   });
+
+  it('listarCobros ignora un cobro que llega sin id: no se podría registrar sin repetirlo', async () => {
+    // Visto en el sandbox: un pago quedó guardado con mp_payment_id "undefined".
+    process.env.MP_ACCESS_TOKEN = 'TEST-token-de-prueba';
+    const aprobado = {
+      id: '1',
+      status: 'approved',
+      status_detail: 'accredited',
+    };
+    const search = jest.spyOn(Invoice.prototype, 'search').mockResolvedValue({
+      paging: { offset: 0, limit: 15, total: 2 },
+      results: [
+        {
+          preapproval_id: 'mp-1',
+          payment: aprobado,
+          transaction_amount: 38_500,
+        },
+        {
+          id: 7031934399,
+          preapproval_id: 'mp-1',
+          payment: aprobado,
+          transaction_amount: 38_500,
+        },
+      ],
+    } as any);
+
+    try {
+      const cobros = await service.listarCobros('mp-1');
+
+      expect(cobros.map((c) => c.id)).toEqual(['7031934399']);
+    } finally {
+      search.mockRestore();
+    }
+  });
 });

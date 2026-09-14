@@ -123,7 +123,8 @@ export class MercadoPagoService {
     }
   }
 
-  async obtenerCobro(id: string): Promise<CobroMp> {
+  /** `null` si Mercado Pago lo devuelve sin id (ver `aCobro`). */
+  async obtenerCobro(id: string): Promise<CobroMp | null> {
     const respuesta = await this.llamar('consultar el cobro', (c) =>
       c.invoice.get({ id }),
     );
@@ -143,12 +144,17 @@ export class MercadoPagoService {
         }),
       );
       const resultados = respuesta.results ?? [];
-      cobros.push(...resultados.map(aCobro));
+      for (const resultado of resultados) {
+        const cobro = aCobro(resultado);
+        if (cobro) cobros.push(cobro);
+      }
 
+      // Se cuenta lo leído y no lo guardado: un cobro ignorado no corta la paginación.
       const total = respuesta.paging?.total;
+      const leidos = (pagina + 1) * COBROS_POR_PAGINA;
       if (
         resultados.length < COBROS_POR_PAGINA ||
-        (total !== undefined && cobros.length >= total)
+        (total !== undefined && leidos >= total)
       ) {
         break;
       }
@@ -235,7 +241,19 @@ export class MercadoPagoService {
   }
 }
 
-function aCobro(cobro: RespuestaCobro): CobroMp {
+/**
+ * `null` si el cobro llega sin id. Sin id no se puede registrar de forma
+ * idempotente: se guardaba como "undefined" y la sincronización siguiente lo
+ * tomaba como un cobro nuevo y extendía el plan dos veces. Pasó en el sandbox
+ * justo después de un pago; se ignora hasta la próxima sincronización.
+ */
+function aCobro(cobro: RespuestaCobro): CobroMp | null {
+  if (cobro.id === undefined || cobro.id === null || String(cobro.id) === '') {
+    new Logger(MercadoPagoService.name).warn(
+      `Cobro de Mercado Pago sin id, se ignora hasta la próxima sincronización. Campos: ${Object.keys(cobro).join(', ')}`,
+    );
+    return null;
+  }
   const fecha = new Date(cobro.debit_date ?? cobro.date_created ?? Number.NaN);
   return {
     id: String(cobro.id),
