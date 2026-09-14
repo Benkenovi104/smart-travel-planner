@@ -179,8 +179,11 @@ nada: da igual cuántas veces o en qué orden lleguen los avisos.
 ## Decisiones pendientes
 
 - **Pasar Sky Scrapper y Booking a planes pagos** de RapidAPI antes de lanzar (ver arriba).
-- **Verificar con el dominio de producción** que llegue el aviso del cobro mensual. En el sandbox
-  no se puede disparar a pedido; mientras tanto lo cubre el respaldo de las renovaciones.
+- **Túnel: ngrok hasta tener un dominio propio.** Con ngrok el pago funciona, pero los avisos de
+  Mercado Pago no llegan. Con dominio propio se pasa a Cloudflare (un túnel con nombre y un
+  subdominio fijo, o directamente el dominio del servidor en producción) y ahí se verifica que
+  llegue el aviso del cobro mensual. En el sandbox no se puede disparar a pedido; mientras tanto
+  lo cubre el respaldo de las renovaciones.
 - **Revisar los precios en pesos** cada tanto por la inflación.
 - Si más adelante se quiere **prorratear** los cambios de plan en vez de empezar un período
   nuevo.
