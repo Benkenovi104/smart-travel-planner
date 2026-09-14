@@ -1,6 +1,6 @@
 # Smart Travel Planner — Backend
 
-API REST del [Smart Travel Planner](../README.md), construida con NestJS 11 y Prisma 7 sobre PostgreSQL. Expone autenticación y gestión de cuenta (incluida recuperación de contraseña por email), perfil de viajero, gestión de viajes, generación/edición de itinerarios asistida por IA (Google Gemini), presupuesto automático, y búsqueda de lugares/vuelos/alojamiento reales. Empaquetado con Docker y cubierto por una suite de tests unitarios y e2e.
+API REST del [Smart Travel Planner](../README.md), construida con NestJS 11 y Prisma 7 sobre PostgreSQL. Expone autenticación y gestión de cuenta (incluida recuperación de contraseña por email), perfil de viajero, gestión de viajes, generación/edición de itinerarios asistida por IA (Google Gemini), presupuesto automático, búsqueda de lugares/vuelos/alojamiento reales, y planes de uso con suscripción mensual de Mercado Pago. Empaquetado con Docker y cubierto por una suite de tests unitarios y e2e.
 
 ## Stack
 
@@ -13,6 +13,7 @@ API REST del [Smart Travel Planner](../README.md), construida con NestJS 11 y Pr
 | IA | Google Gemini (`@google/genai`) para generación de itinerarios |
 | Lugares reales | Google Places API (New) — Text Search, para fundamentar los itinerarios en POIs verificados |
 | Vuelos y alojamiento | RapidAPI — Sky Scrapper (vuelos) y Booking.com/`booking-com15` (alojamiento) |
+| Pagos | Mercado Pago — SDK oficial `mercadopago` (suscripciones `preapproval` + webhooks) |
 | Docs | Swagger (`@nestjs/swagger`) |
 | Rate limiting | `@nestjs/throttler` |
 | Validación | `class-validator` / `class-transformer` |
@@ -60,6 +61,10 @@ Esto arranca dos servicios: `db` (Postgres 16) y `backend`. En el arranque, el b
 | `MAIL_FROM` | No | Dirección "De:" del mail (con Gmail, igual a `SMTP_USER`). |
 | `PORT` | No | Puerto del servidor (default `3000`). |
 | `FRONTEND_URL` | No | Origen permitido por CORS y base del link de reseteo de contraseña (default `http://localhost:3001`). |
+| `MP_ACCESS_TOKEN` | No* | Access Token de la aplicación de Mercado Pago (en desarrollo, el de la cuenta vendedora de prueba). *Sin él la app arranca y los pagos responden 503. |
+| `MP_WEBHOOK_SECRET` | No* | Clave secreta de webhooks del panel de Mercado Pago, para validar la firma de las notificaciones. |
+| `MP_BACK_URL` | No | Adónde vuelve el usuario después de pagar. Mercado Pago exige https: en desarrollo, `https://<túnel>/api/pagos/volver`. Sin definir, `FRONTEND_URL/planes/resultado`. |
+| `MP_PAYER_EMAIL_PRUEBA` | No | Solo en pruebas: el email de la cuenta compradora de prueba, la única que puede pagar en el sandbox. En producción, sin definir. |
 | `NODE_ENV` | No | `development` \| `production` \| `test`. |
 | `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` | No | Reservadas para una futura integración directa con el SDK de Supabase. Hoy la app solo usa `DATABASE_URL`; estas variables no se leen en el código. |
 
@@ -71,6 +76,7 @@ Esto arranca dos servicios: `db` (Postgres 16) y `backend`. En el arranque, el b
 | `npm run start:prod` | Servidor en modo producción (requiere `npm run build` antes). |
 | `npm run build` | Compila a `dist/`. |
 | `npm run seed` | Carga el catálogo de intereses turísticos en la base (idempotente). |
+| `npm run plan:asignar -- <email> <GRATIS\|BASE\|PREMIUM>` | Asigna un plan a mano, sin Mercado Pago y sin vencimiento (desarrollo, demos, cortesías). Se niega si el usuario tiene una suscripción cobrada. |
 | `npm run test` | Tests unitarios (Jest, ESM). |
 | `npm run test:e2e` | Tests end-to-end (ver sección Tests). |
 | `npm run test:cov` | Tests unitarios con cobertura. |
@@ -97,7 +103,7 @@ Con el servidor corriendo:
 | `vuelos` | `/api/viajes/:idViaje/vuelos/*` | Busca opciones reales (Sky Scrapper, ida y vuelta combinadas) y las guarda en `opciones_vuelo` ordenadas por precio. `PATCH .../:idVuelo/seleccionar` elige una (exclusiva por viaje) y recalcula el presupuesto. |
 | `alojamiento` | `/api/viajes/:idViaje/alojamiento/*` | Ídem con Booking.com, ordenadas por precio por noche. La búsqueda pide una habitación doble cada dos personas (`habitacionesPara`). `PATCH .../:idAlojamiento/seleccionar` elige una y suma `precio_por_noche × noches` al presupuesto. |
 
-Todos los endpoints salvo `auth` y `health` requieren `Authorization: Bearer <token>` (`JwtAuthGuard`). La estrategia JWT **verifica contra la base que el usuario siga existiendo**: el token de una cuenta borrada da 401 de inmediato, sin esperar a que venza.
+Todos los endpoints salvo `auth`, `health`, el catálogo `GET /api/planes` y los de `pagos` (webhook y vuelta del checkout) requieren `Authorization: Bearer <token>` (`JwtAuthGuard`). La estrategia JWT **verifica contra la base que el usuario siga existiendo**: el token de una cuenta borrada da 401 de inmediato, sin esperar a que venza.
 
 ### Cinco reglas de dominio que conviene conocer
 
@@ -109,6 +115,57 @@ Todos los endpoints salvo `auth` y `health` requieren `Authorization: Bearer <to
 
 > Nota: los datos de vuelos/alojamiento vienen de mirrors no oficiales de Skyscanner y Booking.com en RapidAPI — son informativos/de simulación, no hay integración de reserva real. Para desarrollar sin gastar cuota, ver `RAPIDAPI_MOCK`.
 
+## Planes y pagos
+
+Las reglas funcionales están en [docs/PLANES.md](../docs/PLANES.md). Acá, cómo está hecho y cómo probarlo.
+
+**Límites.** Los números viven en `planes/planes.config.ts`: límites, precios en pesos, días de gracia y tope diario. Cada acción cara llama a `PlanesService.verificar` antes de gastar, y a `registrar` dentro de la transacción de la operación, así una acción que falla no consume. El plan vigente **se calcula al leer**, sin procesos programados: una suscripción cuyo `vigente_hasta` pasó cuenta como en gracia durante 3 días y después como vencida. Los rechazos tienen cuerpo propio, documentado en Swagger:
+
+| `codigo` | Status | Cuándo |
+|---|---|---|
+| `LIMITE_PLAN` | 403 | El plan no incluye la acción o se agotó su límite. Trae `planSugerido` (el más barato que la permite) y `renuevaEl` si el límite es por período. |
+| `TOPE_DIARIO` | 403 | Tope anti-abuso de 24 h, igual para todos los planes: subir de plan no lo levanta. |
+| `BORRADOR_EXISTENTE` | 409 | Crear un viaje con otro en borrador. Trae `idViaje` para retomarlo. |
+
+**Pagos.** `pagos/mercado-pago.service.ts` es lo único que conoce el SDK. Sin `MP_ACCESS_TOKEN` los pagos responden 503; si Mercado Pago falla, 502.
+
+| Endpoint | Qué hace |
+|---|---|
+| `GET /api/planes` | Catálogo con límites y precios (público). |
+| `GET /api/planes/mi-plan?idViaje=` | Plan vigente, período y uso (del período y, con `idViaje`, de ese viaje). |
+| `POST /api/planes/suscribir` | Crea la suscripción en Mercado Pago (pendiente) y devuelve el `initPoint` del checkout. 409 si ya se cobra un plan igual o mayor. |
+| `GET /api/planes/suscripciones/:id` | Estado de una suscripción propia. Si sigue pendiente, la sincroniza con Mercado Pago: la usa la página de retorno del pago. |
+| `POST /api/planes/cancelar` | Cancela en Mercado Pago y después en la base; el plan sigue hasta el fin del período pagado. |
+| `POST /api/pagos/webhook` | Notificaciones de Mercado Pago (público y sin límite por IP). |
+| `GET /api/pagos/volver` | Redirige la vuelta del checkout al frontend (para desarrollo con túnel). |
+
+Cómo se aplica un pago:
+
+- **Solo activa lo que confirma la API de Mercado Pago.** El webhook valida la firma `x-signature` con el validador del SDK y después vuelve a pedir la suscripción y todos sus cobros: del cuerpo de la notificación solo se usan el tipo y el id. Sincronizar la suscripción entera hace que el orden y los duplicados no importen (`mp_payment_id` es único y cada cobro se aplica con la fila de la suscripción bloqueada).
+- **El plan se activa con el primer cobro aprobado**, que fija el día ancla del período. Cada cobro aprobado extiende un período; uno rechazado pasa el plan a gracia.
+- **Tres caminos llegan a esa misma sincronización:** el webhook, la página de retorno del checkout, y el **respaldo de las renovaciones**: `planVigente` consulta a Mercado Pago las suscripciones que llegaron al fin de lo pagado (hasta 30 días después, como mucho una vez cada 15 minutos por suscripción) antes de pasarlas a gracia.
+- Subir de plan cancela la suscripción anterior recién cuando la nueva queda paga. Borrar la cuenta cancela antes todo lo que Mercado Pago pueda seguir cobrando; si no puede, no borra.
+
+### Probar los pagos en desarrollo
+
+1. En Mercado Pago, una aplicación de **Suscripciones** con dos cuentas de prueba, vendedora y compradora. `MP_ACCESS_TOKEN` es el de la vendedora y `MP_PAYER_EMAIL_PRUEBA` el email de la compradora.
+2. Un túnel público al backend. **Usar cloudflared** (`cloudflared tunnel --url http://localhost:3000`): Mercado Pago no llega a los dominios gratuitos de ngrok. La URL cambia cada vez que se levanta.
+3. En el panel de Mercado Pago, Webhooks en modo de prueba: `https://<túnel>/api/pagos/webhook` con el evento "Planes y suscripciones", y la clave secreta en `MP_WEBHOOK_SECRET`. "Simular notificación" tiene que responder 200.
+4. `MP_BACK_URL=https://<túnel>/api/pagos/volver`: Mercado Pago rechaza `http://localhost` como URL de retorno, y ese endpoint redirige al frontend.
+5. Pagar desde `/planes` entrando al checkout **con la cuenta compradora** ("Ingresar con mi cuenta") y la tarjeta de prueba con titular `APRO`. Pagar "sin cuenta" en el sandbox termina en "No pudimos procesar tu pago".
+
+Para probar un plan sin pagar: `npm run plan:asignar -- <email> <PLAN>`.
+
+Particularidades de la API de Mercado Pago que conviene conocer:
+
+- Las suscripciones de Argentina solo aceptan **ARS**, con un mínimo de $ 15.
+- Para cancelar es `status: "cancelled"`, con dos L: `canceled` da 400.
+- La búsqueda de cobros (`/authorized_payments/search`) acepta **como máximo 15** resultados por página.
+- Agrega sus parámetros a la URL de retorno con `?` aunque ya tenga query (`?idSuscripcion=21?preapproval_id=...`).
+- "Simular notificación" manda `type=subscription_authorized_payment` en la query y `subscription_preapproval` en el cuerpo, con un id falso. El webhook procesa los dos tipos e ignora lo que no existe (consultar como cobro un id que no tiene ese formato da 400, no 404).
+- No avisa por webhook de los cambios hechos por la API con el propio token, y en el sandbox los cobros mensuales no se pueden disparar a pedido.
+- **En producción la URL del webhook tiene que ser un dominio https propio**, no un túnel gratuito.
+
 ## Tests
 
 ```bash
@@ -116,12 +173,12 @@ npm test           # unitarios (~3s)
 npm run test:e2e   # end-to-end (~90s, hace 1 llamada real a Gemini)
 ```
 
-- **Unitarios** (11 suites, 78 tests): cada service aislado, mockeando Prisma y las APIs externas (Gemini/Google/RapidAPI/Mail) por inyección de dependencias; bcrypt/crypto corren reales. Cubren auth (register/login/cambio/forgot/reset, incluido que un fallo de envío del mail no cambie la respuesta genérica), la estrategia JWT (rechaza tokens de cuentas borradas), borrado de cuenta con cascade, IDOR y edición de viajes (validación del rango de fechas, reajuste de los días del itinerario, recálculo del presupuesto), matemática del presupuesto (incluidos vuelo y alojamiento elegidos), ranking y selección de vuelos/alojamiento, el cacheo/refresco y la búsqueda por texto de lugares, la optimización de recorrido por día (nearest-neighbor + 2-opt), y los guards de itinerarios.
-- **E2E** (`test/main-flow.e2e-spec.ts`): bootstrapea la `AppModule` real y recorre el flujo completo **contra la base configurada en `.env`** con **Gemini real** y `RAPIDAPI_MOCK=true`: registro → login → crear viaje → generar itinerario con IA → presupuesto → vuelos/alojamiento → IDOR 403. Crea y borra sus propios usuarios (se autolimpia).
+- **Unitarios** (17 suites, 207 tests): cada service aislado, mockeando Prisma y las APIs externas (Gemini/Google/RapidAPI/Mail) por inyección de dependencias; bcrypt/crypto corren reales. Cubren auth (register/login/cambio/forgot/reset, incluido que un fallo de envío del mail no cambie la respuesta genérica), la estrategia JWT (rechaza tokens de cuentas borradas), borrado de cuenta con cascade, IDOR y edición de viajes (validación del rango de fechas, reajuste de los días del itinerario, recálculo del presupuesto), matemática del presupuesto (incluidos vuelo y alojamiento elegidos), ranking y selección de vuelos/alojamiento, el cacheo/refresco y la búsqueda por texto de lugares, la optimización de recorrido por día (nearest-neighbor + 2-opt), los guards de itinerarios, el motor de planes (plan vigente, períodos anclados al día del pago, límites y tope diario) y los pagos (suscribir, cancelar, firma del webhook, idempotencia, cobros rechazados, subida de plan y respaldo de renovaciones).
+- **E2E** (`test/main-flow.e2e-spec.ts`): bootstrapea la `AppModule` real y recorre el flujo completo **contra la base configurada en `.env`** con **Gemini real** y `RAPIDAPI_MOCK=true`: registro → login → crear viaje (y 409 con un borrador abierto) → generar itinerario con IA → presupuesto → límite del plan Gratis (403) → endpoints de pagos que no llaman a Mercado Pago (validación, 404, webhook con firma inválida, vuelta del checkout) → vuelos/alojamiento → IDOR 403. Crea y borra sus propios usuarios (se autolimpia).
 
 ## Base de datos
 
-El schema de Prisma (`prisma/schema.prisma`) modela usuarios, perfil de viajero, intereses, viajes, itinerarios, días, lugares, actividades, presupuesto, gastos y opciones de vuelo/alojamiento. El cliente generado va a `generated/prisma` (gitignoreado, se regenera con `npx prisma generate`).
+El schema de Prisma (`prisma/schema.prisma`) modela usuarios, perfil de viajero, intereses, viajes, itinerarios, días, lugares, actividades, presupuesto, gastos, opciones de vuelo/alojamiento, y las suscripciones, pagos y consumos de los planes. El cliente generado va a `generated/prisma` (gitignoreado, se regenera con `npx prisma generate`).
 
 Conviven dos flujos, según el entorno:
 
@@ -132,4 +189,4 @@ Conviven dos flujos, según el entorno:
 
 ## Estado del proyecto
 
-Backend **funcionalmente completo**: autenticación y gestión de cuenta, perfil de viajero, viajes, itinerarios con IA y edición manual, presupuesto automático, lugares reales, vuelos y alojamiento, más hardening (validación de env, rate limiting, transacciones, health check), suite de tests y empaquetado con Docker.
+Backend **funcionalmente completo**: autenticación y gestión de cuenta, perfil de viajero, viajes, itinerarios con IA y edición manual, presupuesto automático, lugares reales, vuelos y alojamiento, planes de uso con suscripción de Mercado Pago, más hardening (validación de env, rate limiting, transacciones, health check), suite de tests y empaquetado con Docker.

@@ -21,6 +21,7 @@ import { CreateActividadDto } from './dto/create-actividad.dto.js';
 import { UpdateActividadDto } from './dto/update-actividad.dto.js';
 import { MoverActividadDto } from './dto/mover-actividad.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
+import { ApiRechazosDelPlan } from '../planes/rechazos-plan.swagger.js';
 
 @ApiTags('Itinerarios')
 @ApiBearerAuth()
@@ -33,6 +34,7 @@ export class ItinerariosController {
   @ApiOperation({ summary: 'Generar itinerario con IA para un viaje' })
   @ApiResponse({ status: 201, description: 'Itinerario generado y guardado.' })
   @ApiResponse({ status: 404, description: 'Viaje no encontrado.' })
+  @ApiRechazosDelPlan()
   generar(@Request() req, @Param('idViaje', ParseIntPipe) idViaje: number) {
     return this.itinerariosService.generar(req.user.id_usuario, idViaje);
   }
@@ -127,6 +129,7 @@ export class ItinerariosController {
     status: 400,
     description: 'No hay suficientes actividades con ubicación.',
   })
+  @ApiRechazosDelPlan({ topeDiario: false })
   optimizarDia(
     @Request() req,
     @Param('idViaje', ParseIntPipe) idViaje: number,
@@ -158,7 +161,10 @@ export class ItinerariosController {
     summary:
       'Geolocalizar (Nominatim/OSM) las actividades del itinerario sin coordenadas',
   })
-  geocodificar(@Request() req, @Param('idViaje', ParseIntPipe) idViaje: number) {
+  geocodificar(
+    @Request() req,
+    @Param('idViaje', ParseIntPipe) idViaje: number,
+  ) {
     return this.itinerariosService.geocodificarFaltantes(
       req.user.id_usuario,
       idViaje,

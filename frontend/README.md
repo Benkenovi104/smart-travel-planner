@@ -2,7 +2,7 @@
 
 Aplicación web del [Smart Travel Planner](../README.md), construida con Next.js 16 (App Router) y React 19. Consume el [backend NestJS](../backend/README.md) a través de un **proxy BFF** propio, de modo que el JWT nunca queda accesible al JavaScript del navegador.
 
-Cubre el flujo completo: registro e inicio de sesión, perfil de viajero, creación guiada por pasos y edición de viajes, generación del itinerario con IA, edición manual con drag & drop y búsqueda de lugares reales, mapa, presupuesto, y selección de vuelo y alojamiento.
+Cubre el flujo completo: registro e inicio de sesión, perfil de viajero, creación guiada por pasos y edición de viajes, generación del itinerario con IA, edición manual con drag & drop y búsqueda de lugares reales, mapa, presupuesto, selección de vuelo y alojamiento, y planes de uso con suscripción de Mercado Pago.
 
 ## Stack
 
@@ -72,7 +72,8 @@ Navegador (TanStack Query)  ──fetch same-origin──►  Route Handlers de 
 frontend/
 ├── app/
 │   ├── (auth)/              # grupo público: login, register, forgot/reset password
-│   ├── (app)/               # grupo privado: dashboard, viajes, perfil
+│   ├── (app)/               # grupo privado: dashboard, viajes, perfil, planes
+│   │   ├── planes/          # catálogo y suscripción; resultado/ es la vuelta del checkout
 │   │   └── viajes/
 │   │       ├── nuevo/       # wizard paso 1 — crea el viaje (queda en borrador)
 │   │       └── [id]/
@@ -82,7 +83,7 @@ frontend/
 │   ├── error.tsx            # boundary de errores de ruta
 │   ├── global-error.tsx     # boundary del root layout
 │   ├── not-found.tsx
-│   └── providers.tsx        # TanStack Query + manejo global de 401
+│   └── providers.tsx        # TanStack Query + manejo global de 401 y de los límites del plan
 ├── components/
 │   ├── ui/                  # shadcn
 │   ├── itinerario/          # vista, edición y drag & drop
@@ -90,10 +91,12 @@ frontend/
 │   ├── presupuesto/
 │   ├── reservas/            # vuelos y alojamiento
 │   ├── perfil/
+│   ├── planes/              # badge, medidor de uso, diálogo de límite, Mi plan
 │   └── viajes/
 ├── lib/
 │   ├── api/                 # cliente tipado por recurso + normalización
 │   ├── query/               # query keys y hooks de TanStack Query
+│   ├── planes/              # errores del plan, diálogo global y datos del checkout
 │   └── types/               # `api.ts` (shape crudo) y `models.ts` (dominio)
 └── proxy.ts
 ```
@@ -118,6 +121,10 @@ frontend/
 
 **Manejo global de 401.** Un 401 en una *query* significa sesión vencida: `QueryCache.onError` limpia la caché y manda a `/login`. Va **solo en las queries, nunca en las mutaciones**, porque el backend usa 401 también para "la contraseña actual es incorrecta" (al cambiar la contraseña o borrar la cuenta) y ahí expulsar al usuario sería un bug.
 
+**Planes: la UI no duplica reglas.** Los límites los aplica el backend. La UI muestra lo que devuelve `GET /planes/mi-plan` y deja que las acciones vayan siempre al backend. Un `MutationCache.onError` global en `providers.tsx` abre un diálogo con el plan que habilita la acción ante `LIMITE_PLAN` o `TOPE_DIARIO`, y ante `BORRADOR_EXISTENTE` ofrece retomar el borrador; las pantallas no repiten esos errores en su propio toast (`errorManejadoGlobal`). Las mutaciones que consumen llevan `meta.consumePlan` y refrescan el uso solas.
+
+**Pagos.** Suscribirse redirige al checkout de Mercado Pago. `/planes/resultado` **no activa nada**: consulta el estado de la suscripción cada 3 segundos durante un minuto (el backend lo confirma contra Mercado Pago) y muestra el éxito, un rechazo o un mensaje honesto si la confirmación no llegó. El id de la suscripción viene en la URL de retorno —Mercado Pago le agrega sus parámetros con `?`, por eso se toman solo los dígitos iniciales— y, de respaldo, en `sessionStorage`. "Mi plan", en el perfil, muestra el estado de la suscripción y permite cancelarla.
+
 **Recuperación de contraseña.** `/forgot-password` muestra siempre la misma pantalla exista o no el email, e incluso si el envío del mail falla: el backend responde genérico a propósito para no revelar qué cuentas están registradas.
 
 **Dark mode y controles nativos.** La app es dark-only (`:root` en `app/globals.css` ya trae la paleta oscura). Eso obliga a declarar `color-scheme: dark`: sin esa línea el navegador asume fondo claro y dibuja los controles nativos —ícono del calendario de los `input[type=date]`, flechitas de los `number`, scrollbars, el popup del date picker— con glifos oscuros pensados para fondo blanco, que quedan invisibles. Es preferible a invertir el ícono con `filter`, que no alcanza al popup ni a las scrollbars.
@@ -128,6 +135,6 @@ frontend/
 
 ## Estado
 
-Fases 0 a 7 completas: auth, dashboard, creación guiada en 4 pasos, edición del viaje y de su estado, itinerario generado y editable, autocompletado de lugares reales, optimización de recorrido por día, mapa, presupuesto, vuelos y alojamiento, gestión de cuenta, errores globales y responsive.
+Fases 0 a 7 completas: auth, dashboard, creación guiada en 4 pasos, edición del viaje y de su estado, itinerario generado y editable, autocompletado de lugares reales, optimización de recorrido por día, mapa, presupuesto, vuelos y alojamiento, gestión de cuenta, errores globales y responsive. Además, planes de uso: límites en toda la UI, página de planes, suscripción con Mercado Pago, página de resultado del pago y "Mi plan" con cancelación.
 
 El backlog de mejoras futuras (CI, deploy, tests de frontend, etc.) vive en `EXTRAS.md` en la raíz del repo (documento vivo, no versionado).

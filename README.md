@@ -60,18 +60,17 @@ Un usuario con intereses generales en gastronomía y cultura puede priorizar nie
 | Edición del viaje | ✅ | Cambiar fechas, personas, presupuesto, intereses y estado; el presupuesto se recalcula solo |
 | Guardado de viajes | ✅ | Acceso futuro y reutilización de preferencias |
 | Optimización de rutas | ✅ | Botón "Optimizar" por día: reordena las paradas por cercanía (nearest-neighbor + 2-opt) y corre los horarios a la nueva secuencia |
-| Planes de uso | 🚧 En construcción | Planes Gratis, Base y Premium con suscripción mensual vía Mercado Pago — ver [Planes de Uso](#planes-de-uso) |
+| Planes de uso | ✅ | Planes Gratis, Base y Premium con suscripción mensual vía Mercado Pago, límites aplicados en el backend y "Mi plan" en el perfil — ver [Planes de Uso](#planes-de-uso) |
 
 > **Nota:** Las integraciones de vuelos y alojamiento son informativas: la app muestra opciones y precios, pero no gestiona reservas reales. Lo que **sí** se cobra de verdad son los planes de uso, vía Mercado Pago.
 
 ## Planes de Uso
 
-> **Estado: en construcción.** El modelo de datos ya está creado; los límites y los pagos todavía no funcionan.
-
-La app va a ofrecer tres planes. Los límites apuntan a lo que le cuesta a la app cada acción: crear un viaje es gratis, pero generar un itinerario o buscar vuelos y alojamiento consume servicios externos pagos o con cuota.
+La app ofrece tres planes. Los límites apuntan a lo que le cuesta a la app cada acción: crear un viaje es gratis, pero generar un itinerario o buscar vuelos y alojamiento consume servicios externos pagos o con cuota.
 
 | | Gratis | Base | Premium |
 |---|---|---|---|
+| Precio mensual | $ 0 | $ 12.500 | $ 38.500 |
 | Viajes por período | 1 | 5 | Sin límite |
 | Generar itinerario con IA | 1 vez por viaje | ✓ | ✓ |
 | Regenerar itinerario | ✗ | 3 por viaje | Sin límite |
@@ -82,7 +81,8 @@ La app va a ofrecer tres planes. Los límites apuntan a lo que le cuesta a la ap
 
 - Los planes pagos son una **suscripción mensual de Mercado Pago** que se renueva sola. El período se cuenta desde el día del pago: si pagaste el 13 de agosto, se renueva el 13 de septiembre.
 - Los límites se aplican en el backend. Una acción cuenta solo si sale bien, y borrar un viaje no devuelve el cupo.
-- El plan se activa cuando Mercado Pago confirma el cobro por webhook, no cuando el usuario vuelve a la app. La app nunca maneja datos de tarjeta.
+- El plan se activa recién cuando Mercado Pago confirma el cobro: lo avisa por webhook, y además la app consulta la API de Mercado Pago cuando el usuario vuelve del checkout y cuando un plan llega a su renovación. Volver a la app sin pagar no activa nada, y la app nunca maneja datos de tarjeta.
+- Los precios se cobran en pesos, porque Mercado Pago Argentina no acepta suscripciones en otra moneda. Cancelar conserva el plan hasta el fin del período pagado.
 
 Documentación completa en [docs/PLANES.md](docs/PLANES.md): límites, períodos, cambios de plan, qué cuenta y qué no.
 
@@ -119,7 +119,7 @@ Ambas tienen un flag `seleccionado`: a lo sumo una opción de cada tipo queda el
 ### Historial
 - `cambios_itinerario` — Registro de modificaciones del usuario (trazabilidad)
 
-### Planes y Suscripciones *(en construcción)*
+### Planes y Suscripciones
 - `suscripciones` — Plan de cada usuario, su estado y su período vigente, vinculado a la suscripción de Mercado Pago
 - `pagos_suscripcion` — Cada cobro confirmado por Mercado Pago
 - `consumos` — Registro de cada acción que cuenta para los límites del plan
@@ -137,7 +137,7 @@ Un usuario sin suscripción vigente está en el plan Gratis. Los `consumos` no t
 | Vuelos | Sky Scrapper, vía RapidAPI | Mirror no oficial de Skyscanner |
 | Alojamiento | Booking.com (`booking-com15`), vía RapidAPI | Mirror no oficial |
 | Email | Nodemailer + SMTP (Gmail) | Recuperación de contraseña |
-| Pagos y suscripciones | Mercado Pago — API de Suscripciones (`preapproval`) + webhooks | *En construcción* — ver [docs/PLANES.md](docs/PLANES.md) |
+| Pagos y suscripciones | Mercado Pago — API de Suscripciones (`preapproval`) + webhooks | SDK oficial `mercadopago`, cobro en pesos — ver [docs/PLANES.md](docs/PLANES.md) |
 
 Vuelos y alojamiento usan el free tier de RapidAPI, que es **muy** chico: el plan BASIC de Sky Scrapper son 20 requests por mes y **cada búsqueda de vuelos gasta 4** (resolver los dos aeropuertos + ida y vuelta), o sea 5 búsquedas mensuales. Cuando se agota, la API devuelve **429 y eso no es un bug**; el backend lo propaga como un 429 con un mensaje claro en vez de confundirlo con un destino irresoluble. Ojo que el ciclo de RapidAPI se cuenta **desde el día de alta de la suscripción, no desde el 1° de cada mes**. Cada API tiene su cuota propia: que se agote la de vuelos no afecta a la de alojamiento.
 
@@ -161,7 +161,8 @@ Para desarrollar sin gastar cuota existe `RAPIDAPI_MOCK=true`, que usa datos fix
 smart-travel-planner/
 ├── backend/            # API REST con NestJS — ver backend/README.md
 │   ├── src/            # Módulos: auth, usuarios, viajes, itinerarios,
-│   │                   # presupuestos, lugares, vuelos, alojamiento, mail
+│   │                   # presupuestos, lugares, vuelos, alojamiento, mail,
+│   │                   # planes (límites) y pagos (Mercado Pago)
 │   ├── prisma/         # Schema y migraciones
 │   ├── test/           # Tests e2e (los unitarios viven junto a cada service)
 │   ├── Dockerfile
@@ -257,7 +258,7 @@ Arranca en `http://localhost:3001`. Necesita el backend corriendo.
 - [x] Editar un viaje ya creado (fechas, personas, presupuesto, estado), con recálculo del presupuesto
 - [x] Autocompletado de lugares reales al agregar una actividad
 - [x] Optimización de recorridos por día (heurística tipo TSP: nearest-neighbor + 2-opt), con los horarios corridos a la nueva secuencia
-- [ ] Planes de uso (Gratis / Base / Premium) con suscripción mensual vía Mercado Pago — en construcción, ver [docs/PLANES.md](docs/PLANES.md)
+- [x] Planes de uso (Gratis / Base / Premium) con suscripción mensual vía Mercado Pago, límites aplicados en el backend y "Mi plan" en el perfil — ver [docs/PLANES.md](docs/PLANES.md)
 
 ## Futuras Mejoras
 

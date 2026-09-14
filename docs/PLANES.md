@@ -1,6 +1,6 @@
 # Planes de uso
 
-> **Estado: en construcción.** Este documento define cómo funciona el sistema de planes.
+> **Estado: implementado.** Este documento define cómo funciona el sistema de planes. El detalle técnico (endpoints, variables de entorno, cómo probar los pagos) está en el [README del backend](../backend/README.md#planes-y-pagos).
 
 Smart Travel Planner ofrece tres planes: **Gratis**, **Base** y **Premium**. Los dos
 pagos se cobran con una suscripción mensual de **Mercado Pago** que se renueva sola.
@@ -85,9 +85,9 @@ El período dura un mes y se cuenta **desde el día en que empezó el plan**, no
   - El paso 1 avisa que se va a usar un viaje del período.
   - **Solo se permite un viaje en borrador a la vez.** Si hay uno sin terminar, la app
     ofrece retomarlo en vez de crear otro.
-- **Buscar alojamiento siempre es una acción explícita del usuario.** Hoy la búsqueda se
-  dispara sola al entrar al paso de alojamiento; con planes eso le gastaría al usuario gratis
-  su única búsqueda sin haberla pedido, así que pasa a ser un botón.
+- **Buscar alojamiento siempre es una acción explícita del usuario.** Antes la búsqueda se
+  disparaba sola al entrar al paso de alojamiento; con planes eso le gastaba al usuario gratis
+  su única búsqueda sin haberla pedido, así que pasó a ser un botón.
 - **Editar, mover y borrar actividades, ver el mapa y ver el presupuesto nunca cuentan.**
 - **Los datos de prueba también cuentan.** Con `RAPIDAPI_MOCK=true` las búsquedas no gastan
   cuota externa, pero sí consumen el límite del plan, para poder probar el sistema de planes
@@ -97,8 +97,8 @@ El período dura un mes y se cuenta **desde el día en que empezó el plan**, no
 
 | Situación | Qué pasa |
 |---|---|
-| **Subir de plan** (Gratis → Base, Base → Premium) | Aplica al instante. Empieza un período nuevo desde la fecha del pago. Los días que quedaban del plan anterior **no se reintegran ni se prorratean**. |
-| **Bajar de plan** (Premium → Base) | Se cancela el plan actual, que sigue vigente hasta el fin del período ya pagado. Después, el usuario se suscribe al plan menor. |
+| **Subir de plan** (Gratis → Base, Base → Premium) | Aplica apenas se confirma el pago. Empieza un período nuevo desde la fecha del pago, y la suscripción anterior se cancela recién entonces: si el pago nuevo falla, el usuario conserva la que tenía. Los días que quedaban del plan anterior **no se reintegran ni se prorratean**. |
+| **Bajar de plan** (Premium → Base) | Se cancela el plan actual, que sigue vigente hasta el fin del período ya pagado. Después, el usuario se suscribe al plan menor. Mientras se cobra un plan mayor, la app no deja suscribirse a uno menor, para no cobrar dos veces. |
 | **Cancelar** | Se conservan los beneficios hasta el fin del período pagado. Después pasa a Gratis. |
 | **Falla el cobro de la renovación** | **3 días de gracia** con el plan activo y un aviso. Si no se regulariza, pasa a Gratis. Mercado Pago reintenta el cobro por su cuenta: si un reintento se aprueba más tarde, **el plan vuelve a activarse solo**, aunque ya hubiera pasado a Gratis. |
 
@@ -154,18 +154,33 @@ Para el usuario:
 
 1. Elige un plan en la página `/planes`.
 2. La app lo redirige al **checkout de Mercado Pago**, donde paga con el medio que quiera.
-3. Vuelve a la app, que confirma el pago y activa el plan.
-4. Cada mes Mercado Pago cobra automáticamente. Puede cancelar cuando quiera desde "Mi plan".
+3. Vuelve a la app, a una página que confirma el pago y le muestra el plan activo.
+4. Cada mes Mercado Pago cobra automáticamente. Puede cancelar cuando quiera desde "Mi plan",
+   en el perfil, y conserva el plan hasta el fin del período pagado.
 
 **La app nunca ve ni guarda datos de tarjetas.** Todo el pago ocurre dentro de Mercado Pago.
 
 **El plan se activa cuando Mercado Pago confirma el cobro, no cuando el usuario vuelve a la
 app.** Volver a la página de éxito no prueba nada: cualquiera puede escribir esa URL a mano.
-La confirmación real llega por una notificación de servidor a servidor, firmada por Mercado
-Pago, y cada período nuevo se habilita recién cuando llega la confirmación de su cobro.
+Lo que activa y renueva un plan es siempre la respuesta de la API de Mercado Pago, que se
+consulta por tres caminos:
+
+- **La notificación de Mercado Pago (webhook)**, firmada: es el camino principal. La app
+  valida la firma y vuelve a pedir los datos a la API, porque el cuerpo de una notificación se
+  puede falsificar.
+- **La vuelta del checkout**: la página de resultado pregunta el estado y el backend lo
+  confirma con Mercado Pago, así el plan se activa aunque la notificación demore.
+- **El respaldo de las renovaciones**: si un plan pago llega al fin de lo pagado sin que haya
+  llegado el aviso del cobro, la app le pregunta a Mercado Pago antes de pasarlo a gracia.
+
+Cada cobro aprobado habilita un período más, y aplicar dos veces el mismo cobro no cambia
+nada: da igual cuántas veces o en qué orden lleguen los avisos.
 
 ## Decisiones pendientes
 
 - **Pasar Sky Scrapper y Booking a planes pagos** de RapidAPI antes de lanzar (ver arriba).
+- **Verificar con el dominio de producción** que llegue el aviso del cobro mensual. En el sandbox
+  no se puede disparar a pedido; mientras tanto lo cubre el respaldo de las renovaciones.
+- **Revisar los precios en pesos** cada tanto por la inflación.
 - Si más adelante se quiere **prorratear** los cambios de plan en vez de empezar un período
   nuevo.

@@ -18,6 +18,7 @@ import {
 import { VuelosService } from './vuelos.service.js';
 import { SeleccionarVueloDto } from './dto/seleccionar-vuelo.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
+import { ApiRechazosDelPlan } from '../planes/rechazos-plan.swagger.js';
 
 @ApiTags('Vuelos')
 @ApiBearerAuth()
@@ -35,6 +36,7 @@ export class VuelosController {
     status: 201,
     description: 'Opciones de vuelo encontradas y guardadas.',
   })
+  @ApiRechazosDelPlan()
   buscar(@Request() req, @Param('idViaje', ParseIntPipe) idViaje: number) {
     return this.vuelosService.buscarYGuardar(req.user.id_usuario, idViaje);
   }

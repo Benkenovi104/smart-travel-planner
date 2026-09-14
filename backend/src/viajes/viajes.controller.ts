@@ -20,6 +20,10 @@ import { ViajesService } from './viajes.service.js';
 import { CreateViajeDto } from './dto/create-viaje.dto.js';
 import { UpdateViajeDto } from './dto/update-viaje.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
+import {
+  ApiRechazosDelPlan,
+  BorradorExistenteRespuesta,
+} from '../planes/rechazos-plan.swagger.js';
 
 @ApiTags('Viajes')
 @ApiBearerAuth()
@@ -31,6 +35,13 @@ export class ViajesController {
   @Post()
   @ApiOperation({ summary: 'Crear un nuevo viaje' })
   @ApiResponse({ status: 201, description: 'Viaje creado exitosamente.' })
+  @ApiRechazosDelPlan({ topeDiario: false })
+  @ApiResponse({
+    status: 409,
+    description:
+      'BORRADOR_EXISTENTE: ya hay un viaje en borrador; trae su idViaje para retomarlo.',
+    type: BorradorExistenteRespuesta,
+  })
   create(@Request() req, @Body() dto: CreateViajeDto) {
     return this.viajesService.create(req.user.id_usuario, dto);
   }

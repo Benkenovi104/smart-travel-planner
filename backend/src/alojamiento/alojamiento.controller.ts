@@ -18,6 +18,7 @@ import {
 import { AlojamientoService } from './alojamiento.service.js';
 import { SeleccionarAlojamientoDto } from './dto/seleccionar-alojamiento.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
+import { ApiRechazosDelPlan } from '../planes/rechazos-plan.swagger.js';
 
 @ApiTags('Alojamiento')
 @ApiBearerAuth()
@@ -35,6 +36,7 @@ export class AlojamientoController {
     status: 201,
     description: 'Opciones de alojamiento encontradas y guardadas.',
   })
+  @ApiRechazosDelPlan()
   buscar(@Request() req, @Param('idViaje', ParseIntPipe) idViaje: number) {
     return this.alojamientoService.buscarYGuardar(req.user.id_usuario, idViaje);
   }
