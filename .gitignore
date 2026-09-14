@@ -137,3 +137,10 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Documentos de planificación personales: son hoja de ruta, no documentación
+# del repo. Viven en disco y se mantienen al día, pero no se commitean.
+/EXTRAS.md
+backend/ESTADO_BACKEND.md
+backend/PENDIENTES_BACKEND.md
+frontend/PLAN_FRONTEND.md
