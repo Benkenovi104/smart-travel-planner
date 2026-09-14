@@ -149,8 +149,10 @@ Cómo se aplica un pago:
 ### Probar los pagos en desarrollo
 
 1. En Mercado Pago, una aplicación de **Suscripciones** con dos cuentas de prueba, vendedora y compradora. `MP_ACCESS_TOKEN` es el de la vendedora y `MP_PAYER_EMAIL_PRUEBA` el email de la compradora.
-2. Un túnel público al backend. **Usar cloudflared** (`cloudflared tunnel --url http://localhost:3000`): Mercado Pago no llega a los dominios gratuitos de ngrok. La URL cambia cada vez que se levanta.
-3. En el panel de Mercado Pago, Webhooks en modo de prueba: `https://<túnel>/api/pagos/webhook` con el evento "Planes y suscripciones", y la clave secreta en `MP_WEBHOOK_SECRET`. "Simular notificación" tiene que responder 200.
+2. Un túnel público al backend, con una de dos opciones:
+   - **ngrok con dominio fijo** (`ngrok http --url=<dominio>.ngrok-free.dev 3000`), la que se usa hoy: la URL no cambia, así que el panel y `MP_BACK_URL` se configuran una sola vez. Mercado Pago **no** llega con los webhooks a los dominios gratuitos de ngrok, pero el plan igual se activa por la vuelta del checkout y las renovaciones las cubre el respaldo.
+   - **cloudflared** (`cloudflared tunnel --url http://localhost:3000`), para probar los webhooks: sí los recibe, pero la URL cambia cada vez que se levanta y hay que actualizarla en el panel y en `MP_BACK_URL`.
+3. En el panel de Mercado Pago, Webhooks en modo de prueba: `https://<túnel>/api/pagos/webhook` con el evento "Planes y suscripciones", y la clave secreta en `MP_WEBHOOK_SECRET`. Con cloudflared, "Simular notificación" tiene que responder 200.
 4. `MP_BACK_URL=https://<túnel>/api/pagos/volver`: Mercado Pago rechaza `http://localhost` como URL de retorno, y ese endpoint redirige al frontend.
 5. Pagar desde `/planes` entrando al checkout **con la cuenta compradora** ("Ingresar con mi cuenta") y la tarjeta de prueba con titular `APRO`. Pagar "sin cuenta" en el sandbox termina en "No pudimos procesar tu pago".
 
