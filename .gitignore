@@ -144,3 +144,4 @@ vite.config.ts.timestamp-*
 backend/ESTADO_BACKEND.md
 backend/PENDIENTES_BACKEND.md
 frontend/PLAN_FRONTEND.md
+docs/IMPLEMENTACION_PLANES.md

@@ -1,0 +1,169 @@
+# Planes de uso
+
+> **Estado: en construcción.** Este documento define cómo funciona el sistema de planes.
+
+Smart Travel Planner ofrece tres planes: **Gratis**, **Medio** e **Ilimitado**. Los dos
+pagos se cobran con una suscripción mensual de **Mercado Pago** que se renueva sola.
+
+## Por qué los límites son los que son
+
+Crear un viaje no le cuesta nada a la app. Lo que cuesta es lo que se hace **adentro** de
+cada viaje, porque pega contra servicios externos que se pagan o tienen cuota:
+
+| Acción | Qué consume |
+|---|---|
+| Generar o regenerar el itinerario | Una llamada a Gemini (~45 s) |
+| Buscar vuelos | 4 requests de Sky Scrapper (RapidAPI) |
+| Buscar alojamiento | 2 requests de Booking (RapidAPI) + ~5 de Google Places + 1 de Gemini |
+| Editar, ver el mapa, ver el presupuesto, optimizar | Nada: es cómputo propio |
+
+Por eso los planes limitan **dos cosas**: cuántos viajes se crean por período, y cuántas
+veces se repiten las acciones caras dentro de cada viaje. Limitar solo los viajes no
+alcanza: un usuario gratis que regenera 40 veces su único itinerario cuesta más que uno
+del plan Medio con cinco viajes.
+
+La idea de cada plan:
+
+- **Gratis** deja probar lo mejor de la app **una vez**: un viaje con su itinerario hecho por
+  IA. Lo que no puede es repetir ni usar lo avanzado. Si el plan gratis no mostrara el
+  itinerario generado, nadie entendería por qué pagar.
+- **Medio** agrega la optimización de recorridos y la búsqueda de vuelos, con límites.
+- **Ilimitado** tiene acceso a todo.
+
+## Los tres planes
+
+| | Gratis | Medio | Ilimitado |
+|---|---|---|---|
+| **Precio mensual** | $0 | *a definir (ARS)* | *a definir (ARS)* |
+| **Viajes por período** | 1 | 5 | Sin límite |
+| **Generar itinerario con IA** | 1 vez por viaje | ✓ | ✓ |
+| **Regenerar itinerario** | ✗ | 3 por viaje | Sin límite |
+| **Editar, mapa y presupuesto** | ✓ | ✓ | ✓ |
+| **Optimizar recorrido** | ✗ | ✓ | ✓ |
+| **Buscar alojamiento** | 1 por viaje | 3 por viaje | Sin límite |
+| **Buscar vuelos** | ✗ | 1 por viaje | 3 por viaje |
+
+Los números viven en un único archivo de configuración del backend, así que ajustarlos no
+requiere tocar la lógica. El frontend nunca los tiene escritos: los pide al backend.
+
+## Dos tipos de límite
+
+**Por período** — solo los viajes. Se reinicia cada vez que empieza un período nuevo.
+
+**Por viaje** — generar, regenerar, buscar alojamiento y buscar vuelos. Se cuentan sobre
+ese viaje en particular y **no se reinician** con el período: un viaje del plan Medio tiene
+3 búsquedas de alojamiento en toda su vida, no 3 por mes.
+
+Los límites se evalúan contra el plan **vigente al momento de la acción**. Si un usuario
+pasa de Medio a Ilimitado, sus viajes existentes pasan a tener los límites de Ilimitado.
+
+## El período
+
+El período dura un mes y se cuenta **desde el día en que empezó el plan**, no desde el 1°:
+
+- Si pagaste el **13 de agosto**, el período va del 13 de agosto al **13 de septiembre**, y
+  el siguiente del 13 de septiembre al 13 de octubre.
+- Si ese día no existe en el mes siguiente, vence el **último día** de ese mes, y después
+  vuelve al día original: pago el 31 de enero → vence el 28 de febrero → vence el 31 de
+  marzo.
+- El plan **Gratis** usa la misma regla, contando desde la fecha de registro (o desde el día
+  en que venció el último plan pago, si alguna vez tuvo uno).
+
+## Qué cuenta y qué no
+
+- **Una acción cuenta solo si sale bien.** Si Gemini falla, o RapidAPI devuelve 429 porque
+  se agotó la cuota, el usuario no pierde su intento: el error es nuestro, no suyo.
+- **Borrar un viaje no devuelve el cupo.** Si no, bastaría con crear, borrar y volver a
+  crear. El consumo se registra aparte y sobrevive al borrado.
+- **El viaje cuenta al crearse**, en el primer paso del asistente de creación, porque los
+  pasos siguientes ya buscan vuelos y alojamiento. Para que un asistente abandonado no le
+  queme el cupo a nadie sin darse cuenta:
+  - El paso 1 avisa que se va a usar un viaje del período.
+  - **Solo se permite un viaje en borrador a la vez.** Si hay uno sin terminar, la app
+    ofrece retomarlo en vez de crear otro.
+- **Buscar alojamiento siempre es una acción explícita del usuario.** Hoy la búsqueda se
+  dispara sola al entrar al paso de alojamiento; con planes eso le gastaría al usuario gratis
+  su única búsqueda sin haberla pedido, así que pasa a ser un botón.
+- **Editar, mover y borrar actividades, ver el mapa y ver el presupuesto nunca cuentan.**
+- **Los datos de prueba también cuentan.** Con `RAPIDAPI_MOCK=true` las búsquedas no gastan
+  cuota externa, pero sí consumen el límite del plan, para poder probar el sistema de planes
+  sin gastar nada.
+
+## Cambios de plan
+
+| Situación | Qué pasa |
+|---|---|
+| **Subir de plan** (Gratis → Medio, Medio → Ilimitado) | Aplica al instante. Empieza un período nuevo desde la fecha del pago. Los días que quedaban del plan anterior **no se reintegran ni se prorratean**. |
+| **Bajar de plan** (Ilimitado → Medio) | Se cancela el plan actual, que sigue vigente hasta el fin del período ya pagado. Después, el usuario se suscribe al plan menor. |
+| **Cancelar** | Se conservan los beneficios hasta el fin del período pagado. Después pasa a Gratis. |
+| **Falla el cobro de la renovación** | **3 días de gracia** con el plan activo y un aviso. Si no se regulariza, pasa a Gratis. Mercado Pago reintenta el cobro por su cuenta: si un reintento se aprueba más tarde, **el plan vuelve a activarse solo**, aunque ya hubiera pasado a Gratis. |
+
+**Bajar de plan nunca borra nada.** Los viajes existentes siguen accesibles y editables
+(editar no cuenta para ningún plan). Lo único que cambia es que las acciones nuevas usan
+los límites del plan nuevo: si un viaje ya tiene 3 búsquedas de alojamiento y el usuario
+pasa a Gratis, no puede hacer una cuarta, pero lo que ya encontró sigue ahí.
+
+## Uso razonable y cuotas externas
+
+"Sin límite" es un límite **del plan**. Hay dos cosas por encima que ningún plan puede
+saltear:
+
+**Las cuotas de RapidAPI son de toda la app, no de cada usuario.** Con los planes gratuitos
+actuales:
+
+| API | Cuota mensual | Por búsqueda | Búsquedas por mes, **sumando a todos los usuarios** |
+|---|---|---|---|
+| Sky Scrapper (vuelos) | 20 requests | 4 | **5** |
+| Booking (alojamiento) | 50 requests | 2 | **25** |
+
+Un solo usuario Medio con cinco viajes agota la cuota de vuelos de todos en un mes. **Antes
+de abrir los planes pagos al público hay que pasar esas dos APIs a un plan pago.** Hasta
+entonces, el sistema funciona pero "sin límite" es una promesa que la infraestructura no
+puede cumplir.
+
+**Protección contra abuso.** Todos los planes, incluido Ilimitado, tienen además un tope
+técnico **por usuario, en las últimas 24 horas**:
+
+| Acción | Tope diario |
+|---|---|
+| Generar o regenerar el itinerario | 10 |
+| Buscar vuelos o alojamiento (sumadas) | 20 |
+
+No es una restricción comercial: frena a alguien que regenera o busca en loop, y un uso
+normal no debería tocarla nunca. Si se alcanza, el mensaje lo dice así, sin ofrecer subir de
+plan (subir no lo levanta).
+
+## Qué ve el usuario
+
+- Su **plan actual** en la barra de navegación y en "Mi plan", dentro del perfil.
+- Un **medidor de uso**: *"1 de 1 viajes en este período · se renueva el 13 de octubre"*.
+- En cada viaje, lo que le queda: *"Búsquedas de alojamiento: 2 de 3"*.
+- Los botones de acciones no incluidas en su plan aparecen **bloqueados, con un candado y
+  una invitación a subir de plan**, no escondidos: ocultarlos haría que el usuario gratis no
+  sepa que existen.
+- Al llegar a un límite, un mensaje claro con el plan que lo habilita, en vez de un error
+  genérico.
+
+## Pagos con Mercado Pago
+
+Para el usuario:
+
+1. Elige un plan en la página `/planes`.
+2. La app lo redirige al **checkout de Mercado Pago**, donde paga con el medio que quiera.
+3. Vuelve a la app, que confirma el pago y activa el plan.
+4. Cada mes Mercado Pago cobra automáticamente. Puede cancelar cuando quiera desde "Mi plan".
+
+**La app nunca ve ni guarda datos de tarjetas.** Todo el pago ocurre dentro de Mercado Pago.
+
+**El plan se activa cuando Mercado Pago confirma el cobro, no cuando el usuario vuelve a la
+app.** Volver a la página de éxito no prueba nada: cualquiera puede escribir esa URL a mano.
+La confirmación real llega por una notificación de servidor a servidor, firmada por Mercado
+Pago, y cada período nuevo se habilita recién cuando llega la confirmación de su cobro.
+
+## Decisiones pendientes
+
+- **Precios** de Medio e Ilimitado, en pesos. Hacen falta recién al integrar el cobro con
+  Mercado Pago.
+- **Pasar Sky Scrapper y Booking a planes pagos** de RapidAPI antes de lanzar (ver arriba).
+- Si más adelante se quiere **prorratear** los cambios de plan en vez de empezar un período
+  nuevo.
