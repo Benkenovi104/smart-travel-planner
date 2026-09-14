@@ -31,6 +31,9 @@ const COBRANDO: EstadoSuscripcion[] = [
 const MS_DIA = 86_400_000;
 const OPCIONES_TX = { timeout: 15_000, maxWait: 10_000 };
 
+/** Cada cuánto se puede volver a consultar a Mercado Pago una suscripción vencida. */
+const INTERVALO_RECONCILIACION_MS = 15 * 60_000;
+
 const rango = (plan: Plan) => ORDEN_PLANES.indexOf(plan);
 
 /**
@@ -167,6 +170,47 @@ export class SuscripcionesService {
   /** Para borrar la cuenta: cancela todo lo que Mercado Pago pueda seguir cobrando. */
   async cancelarTodas(id_usuario: number): Promise<void> {
     await this.cancelarEnMercadoPago(await this.cancelables(id_usuario));
+  }
+
+  /** Última consulta a Mercado Pago de cada suscripción vencida (en memoria). */
+  private readonly ultimaReconciliacion = new Map<string, number>();
+
+  /**
+   * Respaldo del webhook para las renovaciones. `planVigente` la llama con las
+   * suscripciones de Mercado Pago que llegaron al fin de lo pagado: si el aviso del
+   * cobro mensual se perdió, sincronizar trae la renovación antes de que el plan
+   * pase a gracia.
+   *
+   * Cada suscripción se consulta como mucho una vez cada 15 minutos (el registro
+   * vive en memoria, así que vale por instancia del backend), y un error de Mercado
+   * Pago no corta la acción del usuario: se sigue con lo que hay en la base.
+   *
+   * Devuelve `true` si sincronizó alguna, para que quien la llamó vuelva a leer.
+   */
+  async reconciliarVencidas(
+    idsSuscripcionMp: string[],
+    ahora = Date.now(),
+  ): Promise<boolean> {
+    let sincronizo = false;
+    for (const id of idsSuscripcionMp) {
+      const ultima = this.ultimaReconciliacion.get(id);
+      if (
+        ultima !== undefined &&
+        ahora - ultima < INTERVALO_RECONCILIACION_MS
+      ) {
+        continue;
+      }
+      this.ultimaReconciliacion.set(id, ahora);
+      try {
+        await this.sincronizar(id);
+        sincronizo = true;
+      } catch (error) {
+        this.logger.warn(
+          `No se pudo reconciliar la suscripción ${id} con Mercado Pago: ${String(error)}`,
+        );
+      }
+    }
+    return sincronizo;
   }
 
   /**

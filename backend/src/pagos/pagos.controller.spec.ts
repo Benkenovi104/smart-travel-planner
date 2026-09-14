@@ -74,6 +74,43 @@ describe('PagosController', () => {
     );
   });
 
+  it('si la query y el cuerpo traen tipos distintos, procesa los dos', async () => {
+    // Así llega el "Simular notificación" del panel de Mercado Pago.
+    await controller.webhook(
+      'ts=1,v1=x',
+      'req-1',
+      { 'data.id': '123456', type: 'subscription_authorized_payment' },
+      { type: 'subscription_preapproval', data: { id: '123456' } },
+    );
+
+    expect(suscripciones.procesarNotificacion.mock.calls).toEqual([
+      ['subscription_authorized_payment', '123456'],
+      ['subscription_preapproval', '123456'],
+    ]);
+  });
+
+  it('si un tipo falla, igual procesa el otro y después responde error para que Mercado Pago reintente', async () => {
+    const caido = new Error('Mercado Pago no responde');
+    suscripciones.procesarNotificacion.mockImplementation(
+      async (tipo: string) => {
+        if (tipo === 'subscription_authorized_payment') throw caido;
+      },
+    );
+
+    await expect(
+      controller.webhook(
+        'ts=1,v1=x',
+        'req-1',
+        { 'data.id': 'abc', type: 'subscription_authorized_payment' },
+        { type: 'subscription_preapproval', data: { id: 'abc' } },
+      ),
+    ).rejects.toBe(caido);
+    expect(suscripciones.procesarNotificacion).toHaveBeenCalledWith(
+      'subscription_preapproval',
+      'abc',
+    );
+  });
+
   it('la vuelta del checkout redirige al frontend conservando los parámetros', () => {
     process.env.FRONTEND_URL = 'http://localhost:3001';
 

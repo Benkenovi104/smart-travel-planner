@@ -1,5 +1,8 @@
 import { createHmac } from 'node:crypto';
-import { ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import {
   describe,
   beforeEach,
@@ -8,7 +11,7 @@ import {
   expect,
   jest,
 } from '@jest/globals';
-import { Invoice } from 'mercadopago';
+import { Invoice, MercadoPagoError } from 'mercadopago';
 import { MercadoPagoService } from './mercado-pago.service.js';
 
 const SECRETO = 'clave-de-webhooks-de-prueba';
@@ -190,5 +193,58 @@ describe('MercadoPagoService', () => {
     } finally {
       search.mockRestore();
     }
+  });
+
+  describe('obtenerCobro', () => {
+    it('devuelve null si el cobro no existe: el simulador del panel manda ids falsos', async () => {
+      process.env.MP_ACCESS_TOKEN = 'TEST-token-de-prueba';
+      const get = jest.spyOn(Invoice.prototype, 'get').mockRejectedValue(
+        new MercadoPagoError({
+          status: 404,
+          message: 'The Authorized Payment with id 123456 does not exist',
+        }),
+      );
+
+      try {
+        await expect(service.obtenerCobro('123456')).resolves.toBeNull();
+      } finally {
+        get.mockRestore();
+      }
+    });
+
+    it('también si el id ni siquiera tiene formato de cobro (400)', async () => {
+      // Visto en vivo: el id de una suscripción consultado como cobro da 400.
+      process.env.MP_ACCESS_TOKEN = 'TEST-token-de-prueba';
+      const get = jest
+        .spyOn(Invoice.prototype, 'get')
+        .mockRejectedValue(
+          new MercadoPagoError({ status: 400, message: 'bad_request_data' }),
+        );
+
+      try {
+        await expect(
+          service.obtenerCobro('0b1d763304af475d960b68280b11ef8b'),
+        ).resolves.toBeNull();
+      } finally {
+        get.mockRestore();
+      }
+    });
+
+    it('cualquier otro error de Mercado Pago sigue siendo 502', async () => {
+      process.env.MP_ACCESS_TOKEN = 'TEST-token-de-prueba';
+      const get = jest
+        .spyOn(Invoice.prototype, 'get')
+        .mockRejectedValue(
+          new MercadoPagoError({ status: 500, message: 'Internal error' }),
+        );
+
+      try {
+        await expect(service.obtenerCobro('7031934399')).rejects.toBeInstanceOf(
+          BadGatewayException,
+        );
+      } finally {
+        get.mockRestore();
+      }
+    });
   });
 });

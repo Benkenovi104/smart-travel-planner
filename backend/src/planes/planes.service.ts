@@ -22,10 +22,23 @@ import {
   LimitePlanException,
   TopeDiarioException,
 } from './limite-plan.exception.js';
+import { SuscripcionesService } from '../pagos/suscripciones.service.js';
 
 type Tx = Prisma.TransactionClient;
 
 const MS_DIA = 86_400_000;
+
+/** Suscripciones por las que Mercado Pago sigue cobrando. */
+const COBRANDO: EstadoSuscripcion[] = [
+  EstadoSuscripcion.ACTIVA,
+  EstadoSuscripcion.EN_GRACIA,
+];
+
+/**
+ * Hasta cuántos días después del fin de lo pagado se sigue consultando a Mercado
+ * Pago por una renovación. Pasado eso, si no cobró ni avisó, el plan ya venció.
+ */
+const DIAS_MAX_RECONCILIACION = 30;
 
 export interface PlanVigente {
   plan: Plan;
@@ -64,12 +77,19 @@ const CLAVE_LIMITE: Record<
 
 @Injectable()
 export class PlanesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly suscripciones: SuscripcionesService,
+  ) {}
 
   /**
    * El plan que tiene el usuario en este momento. **Se calcula al leer**: no hay
    * un proceso que actualice estados, así que una suscripción cuyo `vigente_hasta`
    * ya pasó se trata acá como en gracia o vencida según corresponda.
+   *
+   * Antes de eso, una suscripción de Mercado Pago que llegó al fin de lo pagado se
+   * sincroniza con Mercado Pago: es el respaldo del webhook para las renovaciones,
+   * por si el aviso del cobro mensual no llegó.
    *
    * Sin suscripción que dé acceso, el usuario está en Gratis, con el período
    * anclado a la fecha de registro o al fin de su último plan pago, lo que sea
@@ -79,18 +99,37 @@ export class PlanesService {
     id_usuario: number,
     ahora = new Date(),
   ): Promise<PlanVigente> {
-    const [usuario, suscripciones] = await Promise.all([
+    // PENDIENTE no da acceso: el usuario todavía no pagó.
+    const leerSuscripciones = () =>
+      this.prisma.suscripcion.findMany({
+        where: { id_usuario, estado: { not: EstadoSuscripcion.PENDIENTE } },
+        orderBy: { creada_en: 'desc' },
+      });
+    const [usuario, leidas] = await Promise.all([
       this.prisma.usuario.findUnique({
         where: { id_usuario },
         select: { fecha_registro: true },
       }),
-      // PENDIENTE no da acceso: el usuario todavía no pagó.
-      this.prisma.suscripcion.findMany({
-        where: { id_usuario, estado: { not: EstadoSuscripcion.PENDIENTE } },
-        orderBy: { creada_en: 'desc' },
-      }),
+      leerSuscripciones(),
     ]);
     if (!usuario) throw new NotFoundException('Usuario no encontrado');
+
+    const vencidas = leidas
+      .filter(
+        (s) =>
+          s.mp_preapproval_id !== null &&
+          COBRANDO.includes(s.estado) &&
+          s.vigente_hasta !== null &&
+          s.vigente_hasta.getTime() <= ahora.getTime() &&
+          ahora.getTime() - s.vigente_hasta.getTime() <
+            DIAS_MAX_RECONCILIACION * MS_DIA,
+      )
+      .map((s) => s.mp_preapproval_id as string);
+    const suscripciones =
+      vencidas.length > 0 &&
+      (await this.suscripciones.reconciliarVencidas(vencidas))
+        ? await leerSuscripciones()
+        : leidas;
 
     let elegida: { s: SuscripcionEvaluable; estado: EstadoSuscripcion } | null =
       null;

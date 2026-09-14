@@ -220,7 +220,7 @@ Arranca en `http://localhost:3001`. Necesita el backend corriendo.
 | `npm run start:dev` | Servidor en modo desarrollo (watch) |
 | `npm run start:prod` | Servidor en modo producción (requiere `npm run build`) |
 | `npm run seed` | Carga el catálogo de intereses (idempotente) |
-| `npm run test` | Tests unitarios (17 suites, 196 tests) |
+| `npm run test` | Tests unitarios (17 suites, 207 tests) |
 | `npm run test:e2e` | Tests end-to-end (hace una llamada real a Gemini) |
 | `npm run lint` | ESLint con `--fix` |
 

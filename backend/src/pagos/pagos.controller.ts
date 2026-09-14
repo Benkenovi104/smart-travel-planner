@@ -4,6 +4,7 @@ import {
   Get,
   Headers,
   HttpCode,
+  Logger,
   Post,
   Query,
   Redirect,
@@ -36,6 +37,8 @@ const primero = (valor: string | string[] | undefined) =>
 @SkipThrottle()
 @Controller('pagos')
 export class PagosController {
+  private readonly logger = new Logger(PagosController.name);
+
   constructor(
     private readonly mercadoPago: MercadoPagoService,
     private readonly suscripciones: SuscripcionesService,
@@ -68,11 +71,33 @@ export class PagosController {
       throw new UnauthorizedException('Firma inválida');
     }
 
+    // El tipo no viene firmado, y el simulador del panel manda uno en la query
+    // (subscription_authorized_payment) y otro en el cuerpo
+    // (subscription_preapproval). Si no coinciden se procesan los dos: cada uno
+    // vuelve a consultar a Mercado Pago y aplicarlo dos veces no cambia nada.
+    const tipos = [
+      ...new Set(
+        [primero(query.type), body?.type].filter((t): t is string =>
+          Boolean(t),
+        ),
+      ),
+    ];
+    this.logger.log(
+      `Webhook ${tipos.join(' + ') || '(sin tipo)'} ${dataId ?? '(sin id)'}`,
+    );
+
     if (dataId) {
-      await this.suscripciones.procesarNotificacion(
-        primero(query.type) ?? body?.type,
-        dataId,
-      );
+      // Cada tipo se procesa aunque otro falle. Si alguno falló, se responde error
+      // recién al final, para que Mercado Pago reintente: reprocesar no cambia nada.
+      let fallo: Error | null = null;
+      for (const tipo of tipos) {
+        try {
+          await this.suscripciones.procesarNotificacion(tipo, dataId);
+        } catch (error) {
+          fallo ??= error instanceof Error ? error : new Error(String(error));
+        }
+      }
+      if (fallo) throw fallo;
     }
     return { recibido: true };
   }

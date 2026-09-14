@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { describe, beforeEach, it, expect, jest } from '@jest/globals';
 import { PlanesService } from './planes.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { SuscripcionesService } from '../pagos/suscripciones.service.js';
 import {
   LimitePlanException,
   TopeDiarioException,
@@ -39,6 +40,7 @@ const capturar = async (promesa: Promise<unknown>): Promise<any> =>
 describe('PlanesService', () => {
   let service: PlanesService;
   let prisma: any;
+  let suscripciones: any;
 
   beforeEach(async () => {
     prisma = {
@@ -52,9 +54,15 @@ describe('PlanesService', () => {
     });
     prisma.suscripcion.findMany.mockResolvedValue([]);
     prisma.consumo.count.mockResolvedValue(0);
+    // Mercado Pago no trae renovaciones, salvo que el test diga otra cosa.
+    suscripciones = { reconciliarVencidas: jest.fn(async () => false) };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [PlanesService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        PlanesService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: SuscripcionesService, useValue: suscripciones },
+      ],
     }).compile();
     service = module.get<PlanesService>(PlanesService);
   });
@@ -169,6 +177,55 @@ describe('PlanesService', () => {
         periodoDesde: utc(2026, 9, 13),
         periodoHasta: utc(2026, 10, 13),
       });
+    });
+  });
+
+  describe('reconciliación con Mercado Pago (respaldo del webhook)', () => {
+    const deMp = (datos: Record<string, unknown>) =>
+      suscripcion({ mp_preapproval_id: 'mp-1', ...datos });
+
+    it('una suscripción de Mercado Pago que llegó al fin de lo pagado se sincroniza antes de pasar a gracia', async () => {
+      prisma.suscripcion.findMany
+        .mockResolvedValueOnce([deMp({ vigente_hasta: utc(2026, 9, 13) })])
+        .mockResolvedValueOnce([deMp({ vigente_hasta: utc(2026, 10, 13) })]);
+      suscripciones.reconciliarVencidas.mockResolvedValue(true);
+
+      const vigente = await service.planVigente(1, AHORA);
+
+      expect(suscripciones.reconciliarVencidas).toHaveBeenCalledWith(['mp-1']);
+      expect(vigente).toMatchObject({
+        plan: 'BASE',
+        estado: 'ACTIVA',
+        vigenteHasta: utc(2026, 10, 13),
+      });
+    });
+
+    it('si Mercado Pago no cobró, sigue en gracia con lo que hay en la base', async () => {
+      prisma.suscripcion.findMany.mockResolvedValue([
+        deMp({ vigente_hasta: utc(2026, 9, 13) }),
+      ]);
+
+      const vigente = await service.planVigente(1, AHORA);
+
+      expect(prisma.suscripcion.findMany).toHaveBeenCalledTimes(1);
+      expect(vigente).toMatchObject({ plan: 'BASE', estado: 'EN_GRACIA' });
+    });
+
+    it('no consulta por planes vigentes, asignados a mano, cancelados o vencidos hace más de un mes', async () => {
+      prisma.suscripcion.findMany.mockResolvedValue([
+        deMp({ id_suscripcion: 1, vigente_hasta: utc(2026, 10, 1) }),
+        suscripcion({ id_suscripcion: 2, vigente_hasta: utc(2026, 9, 13) }),
+        deMp({
+          id_suscripcion: 3,
+          estado: 'CANCELADA',
+          vigente_hasta: utc(2026, 9, 13),
+        }),
+        deMp({ id_suscripcion: 4, vigente_hasta: utc(2026, 7, 1) }),
+      ]);
+
+      await service.planVigente(1, AHORA);
+
+      expect(suscripciones.reconciliarVencidas).not.toHaveBeenCalled();
     });
   });
 

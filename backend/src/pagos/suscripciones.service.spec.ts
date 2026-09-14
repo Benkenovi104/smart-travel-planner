@@ -495,6 +495,51 @@ describe('SuscripcionesService', () => {
     });
   });
 
+  describe('reconciliarVencidas (respaldo del webhook)', () => {
+    const vencida = () =>
+      fila({
+        estado: 'ACTIVA',
+        dia_ancla: utc(2026, 8, 13),
+        vigente_desde: utc(2026, 8, 13),
+        vigente_hasta: utc(2026, 9, 13),
+      });
+
+    it('trae la renovación que Mercado Pago cobró aunque el aviso no haya llegado', async () => {
+      db.suscripcion = vencida();
+      mp.listarCobros.mockResolvedValue([
+        cobro({ id: '9002', fecha: utc(2026, 9, 13) }),
+      ]);
+
+      await expect(
+        service.reconciliarVencidas(['mp-1'], Date.UTC(2026, 8, 14)),
+      ).resolves.toBe(true);
+
+      expect(db.suscripcion).toMatchObject({
+        estado: 'ACTIVA',
+        vigente_hasta: utc(2026, 10, 13),
+      });
+    });
+
+    it('consulta cada suscripción como mucho una vez cada 15 minutos', async () => {
+      db.suscripcion = vencida();
+      const t0 = Date.UTC(2026, 8, 14, 12);
+
+      await service.reconciliarVencidas(['mp-1'], t0);
+      await service.reconciliarVencidas(['mp-1'], t0 + 10 * 60_000);
+      expect(mp.obtenerSuscripcion).toHaveBeenCalledTimes(1);
+
+      await service.reconciliarVencidas(['mp-1'], t0 + 16 * 60_000);
+      expect(mp.obtenerSuscripcion).toHaveBeenCalledTimes(2);
+    });
+
+    it('si Mercado Pago falla, no corta la acción del usuario', async () => {
+      db.suscripcion = vencida();
+      mp.obtenerSuscripcion.mockRejectedValue(new BadGatewayException('caído'));
+
+      await expect(service.reconciliarVencidas(['mp-1'])).resolves.toBe(false);
+    });
+  });
+
   describe('estado', () => {
     it('si sigue pendiente, la sincroniza con Mercado Pago antes de responder', async () => {
       mp.listarCobros.mockResolvedValue([

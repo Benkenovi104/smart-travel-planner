@@ -123,12 +123,18 @@ export class MercadoPagoService {
     }
   }
 
-  /** `null` si Mercado Pago lo devuelve sin id (ver `aCobro`). */
+  /**
+   * `null` si el cobro no existe (el simulador del panel de Mercado Pago manda ids
+   * falsos) o si llega sin id (ver `aCobro`). Así el webhook responde 200 y Mercado
+   * Pago no reintenta sin fin algo que nunca va a existir.
+   */
   async obtenerCobro(id: string): Promise<CobroMp | null> {
-    const respuesta = await this.llamar('consultar el cobro', (c) =>
-      c.invoice.get({ id }),
+    const respuesta = await this.llamar<RespuestaCobro | null>(
+      'consultar el cobro',
+      (c) => c.invoice.get({ id }),
+      () => null,
     );
-    return aCobro(respuesta);
+    return respuesta ? aCobro(respuesta) : null;
   }
 
   async listarCobros(idSuscripcionMp: string): Promise<CobroMp[]> {
@@ -200,14 +206,29 @@ export class MercadoPagoService {
     }
   }
 
+  /**
+   * Hace la llamada y convierte los errores de Mercado Pago en 502. Con
+   * `siNoExiste`, que el recurso no exista no es un error y se devuelve ese valor:
+   * un 404, o un 400 cuando el id ni siquiera tiene el formato del recurso (pasa con
+   * el id de una suscripción consultado como cobro).
+   */
   private async llamar<T>(
     que: string,
     operacion: (clientes: Clientes) => Promise<T>,
+    siNoExiste?: () => T,
   ): Promise<T> {
     const clientes = this.clientesConfigurados();
     try {
       return await operacion(clientes);
     } catch (error) {
+      if (
+        siNoExiste &&
+        error instanceof MercadoPagoError &&
+        (error.status === 404 || error.status === 400)
+      ) {
+        this.logger.warn(`Mercado Pago no encontró el recurso al ${que}`);
+        return siNoExiste();
+      }
       const detalle =
         error instanceof MercadoPagoError
           ? `${error.status} ${error.message}`
