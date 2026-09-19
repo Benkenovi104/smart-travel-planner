@@ -48,6 +48,14 @@ No hay variables `NEXT_PUBLIC_*`: el navegador nunca habla directo con el backen
 | `npm run lint` | ESLint (flat config). |
 | `npx tsc --noEmit` | Chequeo de tipos. |
 
+## Deploy (Vercel)
+
+Root Directory `frontend`. Vercel detecta Next solo: no hay que tocar el puerto ni el script de arranque, que en local fijan el 3001.
+
+- Única variable obligatoria: `BACKEND_URL=https://<backend>/api`, la URL pública del backend.
+- `NODE_ENV` vale `production`, así que la cookie de sesión sale con `secure` y el sitio tiene que servirse por https (Vercel ya lo hace).
+- El backend está en un plan gratuito que se duerme: el primer pedido después de un rato sin uso puede tardar cerca de un minuto. Ver el [README raíz](../README.md#deploy).
+
 ## Arquitectura: el BFF proxy
 
 El JavaScript del navegador no puede leer una cookie `httpOnly`, así que no puede armar el header `Authorization: Bearer` por su cuenta. La solución es que Next actúe de intermediario:

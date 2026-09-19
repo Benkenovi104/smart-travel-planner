@@ -235,6 +235,29 @@ Arranca en `http://localhost:3001`. Necesita el backend corriendo.
 | `npm run lint` | ESLint |
 | `npx tsc --noEmit` | Chequeo de tipos |
 
+## Deploy
+
+La app se despliega en tres servicios gratuitos:
+
+| Parte | Dónde | Qué tener en cuenta |
+|---|---|---|
+| Frontend (Next) | **Vercel**, plan Hobby | Siempre despierto. Root directory `frontend`. |
+| Backend (NestJS) | **Render**, web service free | Se duerme a los 15 min sin uso y tarda ~1 min en despertar. Root directory `backend`, build por Dockerfile. |
+| Base de datos | **Supabase**, plan free | La misma que en desarrollo. Se pausa sola a los 7 días sin actividad. |
+
+**Orden**, porque cada lado necesita la URL del otro:
+
+1. **Render** → New Web Service → el repo → Root Directory `backend`, runtime Docker, health check `/api/health`. Cargar las variables de entorno (ver [backend/README](backend/README.md#variables-de-entorno)) **sin** `PORT`: Render la inyecta.
+2. **Vercel** → New Project → el repo → Root Directory `frontend` → variable `BACKEND_URL=https://<servicio>.onrender.com/api`.
+3. Volver a Render y completar `FRONTEND_URL=https://<proyecto>.vercel.app` y `MP_BACK_URL=https://<servicio>.onrender.com/api/pagos/volver`.
+4. En el panel de Mercado Pago, apuntar el webhook a `https://<servicio>.onrender.com/api/pagos/webhook`.
+
+**Mercado Pago queda en modo de prueba.** Lo desplegado son las credenciales de la cuenta vendedora de prueba, así que **nadie puede pagar con dinero real**: para completar un pago hay que entrar al checkout con la cuenta compradora de prueba.
+
+**Cómo evitar el arranque en frío.** `GET /api/health` no pasa por el límite de peticiones y hace `SELECT 1` contra la base, así que un ping cada 10 minutos (GitHub Actions o cron-job.org) mantiene despierto el backend y evita que Supabase pause el proyecto. Render da **750 horas gratis por mes compartidas entre todos los servicios** y un servicio despierto todo el mes gasta unas 720: conviene prender el ping solo alrededor de la presentación.
+
+**Dar de baja:** borrar el servicio en Render y el proyecto en Vercel. La base se puede dejar, porque se pausa sola, o borrarla desde Supabase.
+
 ## Alcance — Primera Versión
 
 - [x] Estructura base backend (NestJS) y frontend (Next.js + App Router)

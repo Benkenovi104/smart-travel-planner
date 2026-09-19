@@ -21,7 +21,17 @@ import { validate } from './config/env.validation.js';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate }),
-    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 60 }]),
+    // El límite es por IP, y detrás del BFF de Next todas las peticiones llegan con
+    // la IP del frontend: desplegado, todos los usuarios comparten el mismo cupo. Por
+    // eso se puede subir con THROTTLE_LIMIT (el ConfigModule de arriba ya cargó el
+    // .env en process.env cuando se evalúa esta línea).
+    ThrottlerModule.forRoot([
+      {
+        name: 'default',
+        ttl: 60_000,
+        limit: Number(process.env.THROTTLE_LIMIT ?? 60),
+      },
+    ]),
     PrismaModule,
     AuthModule,
     ViajesModule,

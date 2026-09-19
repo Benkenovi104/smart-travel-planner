@@ -2,6 +2,7 @@ import { plainToInstance } from 'class-transformer';
 import {
   IsEmail,
   IsIn,
+  IsNumberString,
   IsOptional,
   IsString,
   IsUrl,
@@ -31,6 +32,12 @@ class EnvironmentVariables {
   @IsOptional()
   @IsIn(['true', 'false'])
   RAPIDAPI_MOCK?: string;
+
+  // Peticiones por minuto y por IP (default 60). Detrás del BFF de Next todas
+  // llegan con la IP del frontend, así que desplegado conviene subirlo.
+  @IsOptional()
+  @IsNumberString()
+  THROTTLE_LIMIT?: string;
 
   @IsOptional()
   @IsString()

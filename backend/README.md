@@ -60,6 +60,7 @@ Esto arranca dos servicios: `db` (Postgres 16) y `backend`. En el arranque, el b
 | `SMTP_USER` / `SMTP_PASS` | No* | Cuenta remitente y su **App Password** (Gmail requiere 2FA + App Password de 16 chars). *Requeridas para que `forgot-password` funcione; la app arranca sin ellas. |
 | `MAIL_FROM` | No | Dirección "De:" del mail (con Gmail, igual a `SMTP_USER`). |
 | `PORT` | No | Puerto del servidor (default `3000`). |
+| `THROTTLE_LIMIT` | No | Peticiones por minuto y **por IP** (default `60`). Detrás del BFF de Next todas llegan con la IP del frontend, así que desplegado todos los usuarios comparten el cupo: ahí conviene subirlo (ej. `300`). |
 | `FRONTEND_URL` | No | Origen permitido por CORS y base del link de reseteo de contraseña (default `http://localhost:3001`). |
 | `MP_ACCESS_TOKEN` | No* | Access Token de la aplicación de Mercado Pago (en desarrollo, el de la cuenta vendedora de prueba). *Sin él la app arranca y los pagos responden 503. |
 | `MP_WEBHOOK_SECRET` | No* | Clave secreta de webhooks del panel de Mercado Pago, para validar la firma de las notificaciones. |
@@ -167,7 +168,26 @@ Particularidades de la API de Mercado Pago que conviene conocer:
 - Agrega sus parámetros a la URL de retorno con `?` aunque ya tenga query (`?idSuscripcion=21?preapproval_id=...`).
 - "Simular notificación" manda `type=subscription_authorized_payment` en la query y `subscription_preapproval` en el cuerpo, con un id falso. El webhook procesa los dos tipos e ignora lo que no existe (consultar como cobro un id que no tiene ese formato da 400, no 404).
 - No avisa por webhook de los cambios hechos por la API con el propio token, y en el sandbox los cobros mensuales no se pueden disparar a pedido.
-- **En producción la URL del webhook tiene que ser un dominio https propio**, no un túnel gratuito.
+- **Con la app desplegada el webhook no necesita túnel**: apunta a la URL pública del backend (`https://<servicio>.onrender.com/api/pagos/webhook`), que no cambia. Ver [Deploy (Render)](#deploy-render).
+
+## Deploy (Render)
+
+Corre como web service gratuito de Render, construido con el `Dockerfile` de esta carpeta: Root Directory `backend`, runtime Docker, health check `/api/health`. Lo que cambia respecto de desarrollo:
+
+| Variable | Valor en el deploy |
+|---|---|
+| `PORT` | **No definirla.** Render la inyecta y `main.ts` la lee. |
+| `FRONTEND_URL` | La URL de Vercel: origen de CORS y base del link de reseteo de contraseña. |
+| `MP_BACK_URL` | `https://<servicio>.onrender.com/api/pagos/volver`. |
+| `MP_ACCESS_TOKEN` / `MP_PAYER_EMAIL_PRUEBA` | Siguen siendo los de las cuentas de prueba: nadie puede pagar dinero real. |
+| `RAPIDAPI_MOCK` | `"false"`: datos reales de vuelos y alojamiento. Ojo con la cuota, que es de **5 búsquedas de vuelos por mes para toda la app**; con `"true"` se usan datos fixture y no se gasta nada. |
+| `THROTTLE_LIMIT` | Conviene subirlo (ej. `300`): ver la nota sobre la IP, más abajo. |
+| `NODE_ENV` | `production`. |
+
+- **La base no se migra desde Render**: el schema ya está aplicado en Supabase. Si hiciera falta, `npx prisma migrate deploy` toma el `DATABASE_URL` del entorno (ver `prisma.config.ts`).
+- **El servicio se duerme** a los 15 minutos sin tráfico y tarda ~1 minuto en despertar. Un webhook de Mercado Pago que llegue con el servicio dormido puede vencer; Mercado Pago reintenta y, además, está el respaldo de las renovaciones.
+- **`/api/health` sirve de ping**: no pasa por el límite de peticiones y hace `SELECT 1`, así que mantiene despierto el servicio y evita que Supabase pause el proyecto.
+- **Ojo con el límite de peticiones**: el throttler cuenta por minuto y **por IP**, y con el frontend en Vercel el backend ve la IP de Vercel, no la de cada usuario, así que todos comparten ese cupo. Por eso el límite se configura con `THROTTLE_LIMIT` en lugar de estar fijo en el código.
 
 ## Tests
 
