@@ -159,6 +159,7 @@ Para desarrollar sin gastar cuota existe `RAPIDAPI_MOCK=true`, que usa datos fix
 
 ```
 smart-travel-planner/
+├── .github/workflows/  # Pings programados que mantienen vivo el deploy
 ├── backend/            # API REST con NestJS — ver backend/README.md
 │   ├── src/            # Módulos: auth, usuarios, viajes, itinerarios,
 │   │                   # presupuestos, lugares, vuelos, alojamiento, mail,
@@ -179,7 +180,7 @@ Cada subproyecto tiene su propio README con el detalle de arquitectura, variable
 
 ## Requisitos
 
-- Node.js 20+
+- Node.js **20.19+ o 22.12+** (es lo que pide Prisma 7; el Dockerfile usa 22)
 - PostgreSQL (o acceso a una instancia Supabase)
 - npm / pnpm
 
@@ -192,7 +193,7 @@ cd backend
 npm install
 cp .env.example .env   # completar DATABASE_URL, JWT_SECRET y las API keys
 npx prisma generate
-npx prisma db push     # sincroniza el schema con la base
+npx prisma migrate deploy  # aplica las migraciones versionadas
 npm run seed           # carga el catálogo de intereses
 npm run start:dev
 ```
@@ -219,8 +220,10 @@ Arranca en `http://localhost:3001`. Necesita el backend corriendo.
 | Comando | Descripción |
 |---------|-------------|
 | `npm run start:dev` | Servidor en modo desarrollo (watch) |
+| `npm run build` | Compila a `dist/` |
 | `npm run start:prod` | Servidor en modo producción (requiere `npm run build`) |
 | `npm run seed` | Carga el catálogo de intereses (idempotente) |
+| `npm run plan:asignar -- <email> <GRATIS\|BASE\|PREMIUM>` | Asigna un plan a mano, sin Mercado Pago y sin vencimiento (demos y cortesías) |
 | `npm run test` | Tests unitarios (17 suites, 207 tests) |
 | `npm run test:e2e` | Tests end-to-end (hace una llamada real a Gemini) |
 | `npm run lint` | ESLint con `--fix` |
@@ -247,14 +250,21 @@ La app se despliega en tres servicios gratuitos:
 
 **Orden**, porque cada lado necesita la URL del otro:
 
-1. **Render** → New Web Service → el repo → Root Directory `backend`, runtime Docker, health check `/api/health`. Cargar las variables de entorno (ver [backend/README](backend/README.md#variables-de-entorno)) **sin** `PORT`: Render la inyecta.
+1. **Render** → New Web Service → el repo → Root Directory `backend`, runtime Docker, health check `/api/health`. Cargar las variables de entorno (ver [backend/README](backend/README.md#variables-de-entorno)) **sin** `PORT`, que la inyecta Render, y con `THROTTLE_LIMIT` más alto (por ejemplo `300`): el límite de peticiones se cuenta por IP y, como el frontend hace de intermediario, el backend ve siempre la IP de Vercel.
 2. **Vercel** → New Project → el repo → Root Directory `frontend` → variable `BACKEND_URL=https://<servicio>.onrender.com/api`.
 3. Volver a Render y completar `FRONTEND_URL=https://<proyecto>.vercel.app` y `MP_BACK_URL=https://<servicio>.onrender.com/api/pagos/volver`.
 4. En el panel de Mercado Pago, apuntar el webhook a `https://<servicio>.onrender.com/api/pagos/webhook`.
 
 **Mercado Pago queda en modo de prueba.** Lo desplegado son las credenciales de la cuenta vendedora de prueba, así que **nadie puede pagar con dinero real**: para completar un pago hay que entrar al checkout con la cuenta compradora de prueba.
 
-**Cómo evitar el arranque en frío.** `GET /api/health` no pasa por el límite de peticiones y hace `SELECT 1` contra la base, así que un ping cada 10 minutos (GitHub Actions o cron-job.org) mantiene despierto el backend y evita que Supabase pause el proyecto. Render da **750 horas gratis por mes compartidas entre todos los servicios** y un servicio despierto todo el mes gasta unas 720: conviene prender el ping solo alrededor de la presentación.
+**Los pings ya están en el repo**, en `.github/workflows/`. Los dos pegan a `GET /api/health`, que no pasa por el límite de peticiones y hace `SELECT 1` contra la base:
+
+| Workflow | Cada cuánto | Estado | Para qué |
+|---|---|---|---|
+| `mantener-base-viva.yml` | 3 días | Activo | Que Supabase no pause el proyecto por inactividad. Cuesta unas pocas horas de Render al mes. |
+| `ping.yml` | 10 minutos | Apagado | Que no haya arranque en frío durante una demo. Se prende el día antes desde Actions y se apaga al terminar. |
+
+Render da **750 horas gratis por mes compartidas entre todos los servicios** y un servicio despierto todo el mes gasta unas 720: por eso el ping frecuente queda apagado salvo alrededor de una presentación.
 
 **Dar de baja:** borrar el servicio en Render y el proyecto en Vercel. La base se puede dejar, porque se pausa sola, o borrarla desde Supabase.
 
@@ -282,6 +292,7 @@ La app se despliega en tres servicios gratuitos:
 - [x] Autocompletado de lugares reales al agregar una actividad
 - [x] Optimización de recorridos por día (heurística tipo TSP: nearest-neighbor + 2-opt), con los horarios corridos a la nueva secuencia
 - [x] Planes de uso (Gratis / Base / Premium) con suscripción mensual vía Mercado Pago, límites aplicados en el backend y "Mi plan" en el perfil — ver [docs/PLANES.md](docs/PLANES.md)
+- [x] Deploy gratuito: backend en Render, frontend en Vercel, base en Supabase y pings programados — ver [Deploy](#deploy)
 
 ## Futuras Mejoras
 
@@ -291,7 +302,6 @@ La app se despliega en tres servicios gratuitos:
 - Compartir viajes entre usuarios
 - Exportar itinerarios a PDF
 - Versión móvil o PWA
-- Historial de cambios completo del itinerario
 - Sistema de favoritos y lugares guardados
 
 ## Autores

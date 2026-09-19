@@ -151,7 +151,7 @@ Cómo se aplica un pago:
 
 1. En Mercado Pago, una aplicación de **Suscripciones** con dos cuentas de prueba, vendedora y compradora. `MP_ACCESS_TOKEN` es el de la vendedora y `MP_PAYER_EMAIL_PRUEBA` el email de la compradora.
 2. Un túnel público al backend, con una de dos opciones:
-   - **ngrok con dominio fijo** (`ngrok http --url=<dominio>.ngrok-free.dev 3000`), la que se usa **hasta tener un dominio propio**: la URL no cambia, así que el panel y `MP_BACK_URL` se configuran una sola vez. Mercado Pago **no** llega con los webhooks a los dominios gratuitos de ngrok, pero el plan igual se activa por la vuelta del checkout y las renovaciones las cubre el respaldo.
+   - **ngrok con dominio fijo** (`ngrok http --url=<dominio>.ngrok-free.dev 3000`), la que se usa **hasta tener un dominio propio**: la URL no cambia, así que el panel y `MP_BACK_URL` se configuran una sola vez. Mercado Pago **no** llega con los webhooks a los dominios gratuitos de ngrok —y en el sandbox tampoco avisa de los cobros reales a un dominio público, ver más abajo—, pero el plan igual se activa por la vuelta del checkout y las renovaciones las cubre el respaldo.
    - **cloudflared** (`cloudflared tunnel --url http://localhost:3000`), para probar los webhooks: sí los recibe, pero la URL cambia cada vez que se levanta y hay que actualizarla en el panel y en `MP_BACK_URL`.
    - **Con dominio propio se pasa a Cloudflare:** un túnel con nombre (`cloudflared tunnel create`) apuntando a un subdominio fijo, que recibe los webhooks y no cambia de URL. Con el backend desplegado en un servidor con ese dominio no hace falta túnel: el webhook apunta directo a `https://<dominio>/api/pagos/webhook`.
 3. En el panel de Mercado Pago, Webhooks en modo de prueba: `https://<túnel>/api/pagos/webhook` con el evento "Planes y suscripciones", y la clave secreta en `MP_WEBHOOK_SECRET`. Con cloudflared, "Simular notificación" tiene que responder 200.
@@ -169,6 +169,7 @@ Particularidades de la API de Mercado Pago que conviene conocer:
 - "Simular notificación" manda `type=subscription_authorized_payment` en la query y `subscription_preapproval` en el cuerpo, con un id falso. El webhook procesa los dos tipos e ignora lo que no existe (consultar como cobro un id que no tiene ese formato da 400, no 404).
 - No avisa por webhook de los cambios hechos por la API con el propio token, y en el sandbox los cobros mensuales no se pueden disparar a pedido.
 - **Con la app desplegada el webhook no necesita túnel**: apunta a la URL pública del backend (`https://<servicio>.onrender.com/api/pagos/webhook`), que no cambia. Ver [Deploy (Render)](#deploy-render).
+- **Pero en el sandbox los cobros reales no avisan igual.** Con la app desplegada, el "Simular notificación" del panel llega y responde 200, pero dos pagos de verdad (18/09/2026) no generaron ninguna notificación. O sea que el túnel gratuito no era la única causa: no hay que asumir que el webhook va a llegar. El plan se activa por la vuelta del checkout y las renovaciones dependen del respaldo de reconciliación.
 
 ## Deploy (Render)
 
