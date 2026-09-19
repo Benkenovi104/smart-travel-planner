@@ -1,0 +1,37 @@
+name: Mantener despierto el backend
+
+# Render duerme el servicio gratuito a los 15 minutos sin tráfico y tarda cerca de un
+# minuto en despertar; Supabase pausa el proyecto a los 7 días sin actividad.
+# `/api/health` cubre las dos cosas: no pasa por el límite de peticiones y hace un
+# SELECT 1 contra la base.
+#
+# OJO: Render da 750 horas gratis por mes compartidas entre todos los servicios de la
+# cuenta, y un servicio despierto todo el mes gasta unas 720. Tener esto prendido
+# siempre se come casi todo el cupo: conviene activarlo unos días antes de una
+# presentación y apagarlo después, desde Actions > este workflow > Disable workflow.
+#
+# GitHub corre los workflows programados cuando puede, así que a veces se atrasa
+# varios minutos y el servicio puede llegar a dormirse igual. Si hace falta que no
+# falle nunca, usar un servicio externo de pings (por ejemplo cron-job.org).
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Despertar el backend
+        env:
+          URL: https://smart-travel-planner-q40q.onrender.com/api/health
+        run: |
+          for intento in 1 2 3; do
+            codigo=$(curl -s -o /dev/null -w '%{http_code}' --max-time 120 "$URL")
+            echo "intento $intento -> HTTP $codigo"
+            if [ "$codigo" = "200" ]; then exit 0; fi
+            sleep 20
+          done
+          echo "el backend no respondió 200"
+          exit 1
