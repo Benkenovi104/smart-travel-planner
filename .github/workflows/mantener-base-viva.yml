@@ -1,0 +1,33 @@
+name: Mantener viva la base
+
+# Supabase pausa los proyectos del plan gratuito a los 7 días sin actividad, y
+# despausarlos es a mano desde su panel. Este workflow pega a `/api/health` cada
+# 3 días, que hace un SELECT 1 y reinicia ese contador.
+#
+# Es barato en horas de Render: despierta el servicio un rato y se vuelve a dormir
+# a los 15 minutos, así que gasta unas pocas horas al mes de las 750 gratis. Este
+# queda SIEMPRE ACTIVO; el que hay que prender y apagar es `ping.yml`, que corre
+# cada 10 minutos y sirve para que no haya arranque en frío durante una demo.
+
+on:
+  schedule:
+    - cron: '0 15 */3 * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Despertar el backend y tocar la base
+        env:
+          URL: https://smart-travel-planner-q40q.onrender.com/api/health
+        run: |
+          for intento in 1 2 3; do
+            respuesta=$(curl -s --max-time 120 -w '\n%{http_code}' "$URL")
+            codigo=$(echo "$respuesta" | tail -n 1)
+            echo "intento $intento -> HTTP $codigo | $(echo "$respuesta" | head -n 1)"
+            if [ "$codigo" = "200" ]; then exit 0; fi
+            sleep 20
+          done
+          echo "el backend no respondió 200: revisar si Supabase pausó el proyecto"
+          exit 1
