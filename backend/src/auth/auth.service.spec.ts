@@ -3,6 +3,7 @@ import {
   ConflictException,
   UnauthorizedException,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { describe, beforeEach, it, expect, jest } from '@jest/globals';
 import * as bcrypt from 'bcrypt';
@@ -160,10 +161,11 @@ describe('AuthService', () => {
   });
 
   describe('forgotPassword', () => {
-    it('con email inexistente responde genérico y NO manda mail', async () => {
+    it('con email inexistente lanza NotFoundException y NO manda mail', async () => {
       prisma.usuario.findUnique.mockResolvedValue(null);
-      const res = await service.forgotPassword({ email: 'no@test.com' });
-      expect(res.message).toMatch(/si el email está registrado/i);
+      await expect(
+        service.forgotPassword({ email: 'no@test.com' }),
+      ).rejects.toThrow(NotFoundException);
       expect(mail.enviarResetPassword).not.toHaveBeenCalled();
       expect(prisma.usuario.update).not.toHaveBeenCalled();
     });
@@ -176,7 +178,7 @@ describe('AuthService', () => {
       prisma.usuario.update.mockResolvedValue({});
 
       const res = await service.forgotPassword({ email: 'juan@test.com' });
-      expect(res.message).toMatch(/si el email está registrado/i);
+      expect(res.message).toMatch(/email de recuperación enviado/i);
 
       const updateArg = prisma.usuario.update.mock.calls[0][0] as any;
       expect(updateArg.data.reset_token_hash).toEqual(expect.any(String));
@@ -193,7 +195,7 @@ describe('AuthService', () => {
       expect(url).toContain('token=');
     });
 
-    it('si falla el envío responde genérico igual, para no filtrar qué emails existen', async () => {
+    it('si falla el envío propaga la excepción para notificar el error', async () => {
       prisma.usuario.findUnique.mockResolvedValue({
         id_usuario: 7,
         email: 'juan@test.com',
@@ -203,10 +205,9 @@ describe('AuthService', () => {
         new Error('Invalid login: 535-5.7.8'),
       );
 
-      const res = await service.forgotPassword({ email: 'juan@test.com' });
-      // misma respuesta que para un email inexistente: sin esto, un 500 acá
-      // delataría que la cuenta está registrada
-      expect(res.message).toMatch(/si el email está registrado/i);
+      await expect(
+        service.forgotPassword({ email: 'juan@test.com' }),
+      ).rejects.toThrow('Invalid login: 535-5.7.8');
     });
   });
 

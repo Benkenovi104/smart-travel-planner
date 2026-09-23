@@ -45,16 +45,26 @@ export default function ForgotPasswordPage() {
 
   function onSubmit(values: Values) {
     forgot.mutate(values.email, {
-      // El backend responde igual exista o no el email. Mostramos siempre la
-      // misma pantalla: decir "ese email no está registrado" filtraría qué
-      // cuentas existen.
       onSuccess: () => setEnviado(true),
-      onError: (e) =>
-        toast.error(
-          e instanceof ApiError && e.status === 429
-            ? 'Demasiados intentos. Esperá un momento antes de reintentar.'
-            : 'No se pudo enviar el email. Probá de nuevo en un rato.',
-        ),
+      onError: (e) => {
+        if (e instanceof ApiError && e.status === 404) {
+          form.setError('email', {
+            message:
+              e.message ||
+              'No existe una cuenta registrada con este correo electrónico',
+          });
+        } else if (e instanceof ApiError && e.status === 429) {
+          toast.error(
+            'Demasiados intentos. Esperá un momento antes de reintentar.',
+          );
+        } else {
+          toast.error(
+            e instanceof ApiError
+              ? e.message
+              : 'No se pudo enviar el email. Probá de nuevo en un rato.',
+          );
+        }
+      },
     });
   }
 
@@ -65,9 +75,11 @@ export default function ForgotPasswordPage() {
           <MailCheck className="text-muted-foreground mx-auto size-10" />
           <CardTitle className="text-2xl">Revisá tu correo</CardTitle>
           <CardDescription>
-            Si <span className="text-foreground">{form.getValues('email')}</span>{' '}
-            tiene una cuenta, le enviamos un link para restablecer la contraseña.
-            El link vence en una hora.
+            Le enviamos un enlace a{' '}
+            <span className="text-foreground font-medium">
+              {form.getValues('email')}
+            </span>{' '}
+            para restablecer la contraseña. El enlace vence en una hora.
           </CardDescription>
         </CardHeader>
         <CardFooter className="flex-col gap-3">

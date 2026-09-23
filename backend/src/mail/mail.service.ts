@@ -32,6 +32,9 @@ export class MailService {
       port,
       secure: port === 465, // 465 = SSL directo; 587 = STARTTLS
       auth: { user, pass },
+      connectionTimeout: 10_000, // 10s límite para conectar con el servidor SMTP
+      greetingTimeout: 10_000, // 10s límite para saludo SMTP
+      socketTimeout: 15_000, // 15s límite para operaciones de socket
     });
 
     return this.transporter;
