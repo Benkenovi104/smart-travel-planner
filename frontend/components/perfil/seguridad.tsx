@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
@@ -38,12 +38,14 @@ import {
 } from '@/components/ui/form';
 import { useChangePassword, useEliminarCuenta } from '@/lib/query/use-auth';
 import { ApiError } from '@/lib/api/client';
+import { passwordFuerte } from '@/lib/password';
+import { RequisitosPassword } from '@/components/auth/requisitos-password';
 
 // ---------- Cambiar contraseña ----------
 const passwordSchema = z
   .object({
     password_actual: z.string().min(1, 'Requerido'),
-    password_nueva: z.string().min(8, 'Mínimo 8 caracteres'),
+    password_nueva: passwordFuerte,
     confirmacion: z.string(),
   })
   .refine((v) => v.password_nueva === v.confirmacion, {
@@ -66,6 +68,10 @@ export function CambiarPassword() {
       confirmacion: '',
     },
   });
+
+  // useWatch y no form.watch(): watch() devuelve una función que el compilador
+  // de React no puede memoizar, y avisa que se puede quedar con UI vieja.
+  const passwordNueva = useWatch({ control: form.control, name: 'password_nueva' });
 
   function onSubmit(values: PasswordValues) {
     cambiar.mutate(
@@ -158,6 +164,7 @@ export function CambiarPassword() {
                 )}
               />
             </div>
+            <RequisitosPassword valor={passwordNueva ?? ''} />
             <div className="flex justify-end pt-2">
               <Button
                 type="submit"

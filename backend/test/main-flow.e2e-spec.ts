@@ -20,7 +20,7 @@ describe('Flujo principal (e2e)', () => {
   let prisma: PrismaService;
 
   const email = `e2e_${Date.now()}@test.com`;
-  const password = 'password123';
+  const password = 'Password123!';
 
   beforeAll(async () => {
     process.env.RAPIDAPI_MOCK = 'true'; // no gastar cuota de RapidAPI en los tests

@@ -30,10 +30,12 @@ import {
 } from '@/components/ui/form';
 import { useResetPassword } from '@/lib/query/use-auth';
 import { ApiError } from '@/lib/api/client';
+import { passwordFuerte } from '@/lib/password';
+import { RequisitosPassword } from '@/components/auth/requisitos-password';
 
 const schema = z
   .object({
-    password: z.string().min(8, 'Mínimo 8 caracteres'),
+    password: passwordFuerte,
     confirmacion: z.string(),
   })
   .refine((v) => v.password === v.confirmacion, {
@@ -103,7 +105,11 @@ function ResetPasswordForm() {
                       {...field}
                     />
                   </FormControl>
-                  <FormMessage />
+                  {field.value ? (
+                    <RequisitosPassword valor={field.value} />
+                  ) : (
+                    <FormMessage />
+                  )}
                 </FormItem>
               )}
             />

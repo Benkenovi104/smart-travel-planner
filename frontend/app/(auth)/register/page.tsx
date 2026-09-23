@@ -31,12 +31,14 @@ import {
 } from '@/components/ui/form';
 import { useRegister } from '@/lib/query/use-auth';
 import { ApiError } from '@/lib/api/client';
+import { passwordFuerte } from '@/lib/password';
+import { RequisitosPassword } from '@/components/auth/requisitos-password';
 
 const schema = z.object({
   nombre: z.string().min(1, 'Ingresá tu nombre').max(100),
   apellido: z.string().min(1, 'Ingresá tu apellido').max(100),
   email: z.string().email('Ingresá un email válido'),
-  password: z.string().min(8, 'Mínimo 8 caracteres').max(72),
+  password: passwordFuerte,
 });
 type Values = z.infer<typeof schema>;
 
@@ -188,7 +190,7 @@ export default function RegisterPage() {
                         <Lock className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
                         <Input
                           type={showPassword ? 'text' : 'password'}
-                          placeholder="Mínimo 8 caracteres"
+                          placeholder="Creá una contraseña segura"
                           autoComplete="new-password"
                           className="pl-10 pr-10 bg-slate-950/60 border-slate-800 text-white placeholder:text-slate-500 focus:border-sky-500 focus:ring-sky-500/20 h-11"
                           {...field}
@@ -207,7 +209,11 @@ export default function RegisterPage() {
                         </button>
                       </div>
                     </FormControl>
-                    <FormMessage />
+                    {field.value ? (
+                      <RequisitosPassword valor={field.value} />
+                    ) : (
+                      <FormMessage />
+                    )}
                   </FormItem>
                 )}
               />

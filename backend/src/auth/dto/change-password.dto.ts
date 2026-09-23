@@ -1,5 +1,6 @@
-import { IsString, MinLength, MaxLength } from 'class-validator';
+import { IsString, MinLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { EsPasswordFuerte, PASSWORD_MIN } from './password-fuerte.decorator.js';
 
 export class ChangePasswordDto {
   @ApiProperty({ example: 'miPasswordActual123' })
@@ -7,9 +8,12 @@ export class ChangePasswordDto {
   @MinLength(1)
   password_actual: string;
 
-  @ApiProperty({ example: 'miPasswordNueva123', minLength: 8 })
-  @IsString()
-  @MinLength(8)
-  @MaxLength(72)
+  @ApiProperty({
+    example: 'MiPasswordNueva123!',
+    minLength: PASSWORD_MIN,
+    description:
+      'Al menos 8 caracteres, con minúscula, mayúscula, número y un carácter especial.',
+  })
+  @EsPasswordFuerte()
   password_nueva: string;
 }

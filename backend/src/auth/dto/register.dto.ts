@@ -1,11 +1,6 @@
-import {
-  IsEmail,
-  IsString,
-  MinLength,
-  MaxLength,
-  IsOptional,
-} from 'class-validator';
+import { IsEmail, IsString, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { EsPasswordFuerte, PASSWORD_MIN } from './password-fuerte.decorator.js';
 
 export class RegisterDto {
   @ApiProperty({ example: 'Juan' })
@@ -22,9 +17,12 @@ export class RegisterDto {
   @IsEmail()
   email: string;
 
-  @ApiProperty({ example: 'miPassword123', minLength: 8 })
-  @IsString()
-  @MinLength(8)
-  @MaxLength(72)
+  @ApiProperty({
+    example: 'MiPassword123!',
+    minLength: PASSWORD_MIN,
+    description:
+      'Al menos 8 caracteres, con minúscula, mayúscula, número y un carácter especial.',
+  })
+  @EsPasswordFuerte()
   password: string;
 }
