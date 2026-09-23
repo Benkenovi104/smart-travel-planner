@@ -47,6 +47,7 @@ import {
 import { EstadoSelect } from '@/components/viajes/estado-select';
 import { PRIMER_PASO } from '@/components/viajes/wizard-pasos';
 import { EditarViajeDialog } from '@/components/viajes/editar-viaje-dialog';
+import { DescargarPDF } from '@/components/viajes/descargar-pdf';
 import { EditableItinerario } from '@/components/itinerario/editable-itinerario';
 import { HistorialCambios } from '@/components/itinerario/historial-cambios';
 import { MapaSection } from '@/components/mapa/mapa-section';
@@ -184,6 +185,8 @@ export default function ViajeDetallePage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <DescargarPDF idViaje={id} />
+
           <EditarViajeDialog
             viaje={viaje}
             tieneItinerario={Boolean(itinerario.data)}
