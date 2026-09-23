@@ -3,7 +3,6 @@ import {
   ConflictException,
   UnauthorizedException,
   BadRequestException,
-  NotFoundException,
 } from '@nestjs/common';
 import { describe, beforeEach, it, expect, jest } from '@jest/globals';
 import * as bcrypt from 'bcrypt';
@@ -23,7 +22,10 @@ describe('AuthService', () => {
     };
   };
   let jwt: { sign: jest.Mock };
-  let mail: { enviarResetPassword: jest.Mock };
+  let mail: {
+    enviarResetPassword: jest.Mock;
+    enviarCuentaInexistente: jest.Mock;
+  };
 
   beforeEach(async () => {
     prisma = {
@@ -35,7 +37,10 @@ describe('AuthService', () => {
       },
     };
     jwt = { sign: jest.fn(() => 'mock.jwt.token') };
-    mail = { enviarResetPassword: jest.fn(async () => undefined) };
+    mail = {
+      enviarResetPassword: jest.fn(async () => undefined),
+      enviarCuentaInexistente: jest.fn(async () => undefined),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -161,13 +166,32 @@ describe('AuthService', () => {
   });
 
   describe('forgotPassword', () => {
-    it('con email inexistente lanza NotFoundException y NO manda mail', async () => {
+    it('con email inexistente responde genérico y NO manda el de reseteo', async () => {
       prisma.usuario.findUnique.mockResolvedValue(null);
-      await expect(
-        service.forgotPassword({ email: 'no@test.com' }),
-      ).rejects.toThrow(NotFoundException);
+      const res = await service.forgotPassword({ email: 'no@test.com' });
+      expect(res.message).toMatch(/si el email está registrado/i);
       expect(mail.enviarResetPassword).not.toHaveBeenCalled();
       expect(prisma.usuario.update).not.toHaveBeenCalled();
+    });
+
+    it('con email inexistente le avisa por mail al dueño de la casilla', async () => {
+      // El aviso va por mail y no por la respuesta HTTP justamente porque el
+      // mail sólo lo lee el dueño; la respuesta la lee cualquiera.
+      prisma.usuario.findUnique.mockResolvedValue(null);
+
+      await service.forgotPassword({ email: 'no@test.com' });
+
+      expect(mail.enviarCuentaInexistente).toHaveBeenCalledWith('no@test.com');
+    });
+
+    it('si falla ese aviso responde genérico igual, no un 500', async () => {
+      // Un 500 sólo para las direcciones sin cuenta las delataría por descarte.
+      prisma.usuario.findUnique.mockResolvedValue(null);
+      mail.enviarCuentaInexistente.mockRejectedValue(new Error('SMTP caído'));
+
+      const res = await service.forgotPassword({ email: 'no@test.com' });
+
+      expect(res.message).toMatch(/si el email está registrado/i);
     });
 
     it('con email existente guarda token hasheado y manda mail', async () => {
@@ -178,7 +202,7 @@ describe('AuthService', () => {
       prisma.usuario.update.mockResolvedValue({});
 
       const res = await service.forgotPassword({ email: 'juan@test.com' });
-      expect(res.message).toMatch(/email de recuperación enviado/i);
+      expect(res.message).toMatch(/si el email está registrado/i);
 
       const updateArg = prisma.usuario.update.mock.calls[0][0] as any;
       expect(updateArg.data.reset_token_hash).toEqual(expect.any(String));
@@ -195,7 +219,7 @@ describe('AuthService', () => {
       expect(url).toContain('token=');
     });
 
-    it('si falla el envío propaga la excepción para notificar el error', async () => {
+    it('si falla el envío responde genérico igual, para no filtrar qué emails existen', async () => {
       prisma.usuario.findUnique.mockResolvedValue({
         id_usuario: 7,
         email: 'juan@test.com',
@@ -205,9 +229,10 @@ describe('AuthService', () => {
         new Error('Invalid login: 535-5.7.8'),
       );
 
-      await expect(
-        service.forgotPassword({ email: 'juan@test.com' }),
-      ).rejects.toThrow('Invalid login: 535-5.7.8');
+      const res = await service.forgotPassword({ email: 'juan@test.com' });
+      // misma respuesta que para un email inexistente: sin esto, un 500 acá
+      // delataría que la cuenta está registrada
+      expect(res.message).toMatch(/si el email está registrado/i);
     });
   });
 
@@ -233,9 +258,9 @@ describe('AuthService', () => {
       const updateArg = prisma.usuario.update.mock.calls[0][0] as any;
       expect(updateArg.data.reset_token_hash).toBeNull();
       expect(updateArg.data.reset_token_expira).toBeNull();
-      expect(await bcrypt.compare('nueva456', updateArg.data.password_hash)).toBe(
-        true,
-      );
+      expect(
+        await bcrypt.compare('nueva456', updateArg.data.password_hash),
+      ).toBe(true);
     });
   });
 });

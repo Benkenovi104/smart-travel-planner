@@ -33,8 +33,9 @@ export function logout() {
 }
 
 /**
- * Pide el email de recuperación. Si el email existe y el envío es exitoso,
- * devuelve confirmación. Si el email no está registrado, lanza error 404.
+ * Pide el email de recuperación. El backend responde siempre lo mismo exista o
+ * no el email, para no revelar qué cuentas están registradas: la UI tiene que
+ * mostrar el mismo mensaje en los dos casos.
  */
 export function forgotPassword(email: string) {
   return apiFetch<{ message: string }>('auth/forgot-password', {

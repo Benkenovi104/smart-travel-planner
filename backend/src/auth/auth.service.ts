@@ -4,7 +4,6 @@ import {
   ConflictException,
   UnauthorizedException,
   BadRequestException,
-  NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -20,6 +19,8 @@ import type { JwtPayload } from './strategies/jwt.strategy.js';
 
 const SALT_ROUNDS = 12;
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hora
+const MENSAJE_FORGOT_GENERICO =
+  'Si el email está registrado, te enviamos un enlace para restablecer la contraseña.';
 
 @Injectable()
 export class AuthService {
@@ -119,10 +120,21 @@ export class AuthService {
       where: { email: dto.email },
     });
 
+    // Respuesta genérica siempre: si acá devolviéramos un 404, cualquiera
+    // podría probar direcciones y averiguar cuáles tienen cuenta. Para que el
+    // dueño de la casilla igual se entere, se le avisa por mail —que sólo puede
+    // leer él— en vez de por la respuesta HTTP, que puede leer cualquiera.
     if (!usuario) {
-      throw new NotFoundException(
-        'No existe una cuenta registrada con este correo electrónico',
+      this.logger.warn(
+        `Pedido de reseteo para un email sin cuenta: ${dto.email}`,
       );
+      try {
+        await this.mail.enviarCuentaInexistente(dto.email);
+      } catch {
+        // Ya lo logueó MailService. No se propaga: un 500 sólo para las
+        // direcciones sin cuenta delataría, por descarte, cuáles sí existen.
+      }
+      return { message: MENSAJE_FORGOT_GENERICO };
     }
 
     const rawToken = randomBytes(32).toString('hex');
@@ -137,6 +149,9 @@ export class AuthService {
     const baseUrl = process.env.FRONTEND_URL ?? 'http://localhost:3001';
     const resetUrl = `${baseUrl}/reset-password?token=${rawToken}`;
 
+    // Si el envío falla, lo registramos pero devolvemos igual la respuesta
+    // genérica: un 500 acá sólo se daría para emails que existen, y eso
+    // permitiría enumerar qué cuentas están registradas.
     try {
       await this.mail.enviarResetPassword(usuario.email, resetUrl);
     } catch (error) {
@@ -144,10 +159,9 @@ export class AuthService {
       this.logger.error(
         `No se pudo enviar el email de reseteo a ${usuario.email}: ${mensaje}`,
       );
-      throw error;
     }
 
-    return { message: 'Email de recuperación enviado correctamente' };
+    return { message: MENSAJE_FORGOT_GENERICO };
   }
 
   async resetPassword(dto: ResetPasswordDto) {

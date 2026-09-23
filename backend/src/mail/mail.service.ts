@@ -1,4 +1,8 @@
-import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
 
@@ -61,10 +65,49 @@ export class MailService {
       this.logger.log(`Email de reseteo enviado a ${email}`);
     } catch (error) {
       const mensaje = error instanceof Error ? error.message : String(error);
+      // El detalle de SMTP queda en el log y no viaja al cliente: los errores
+      // de nodemailer traen host y motivo de rechazo del servidor.
       this.logger.error(`Falló el envío de email a ${email}: ${mensaje}`);
       throw new InternalServerErrorException(
-        `No se pudo enviar el email de restablecimiento (${mensaje})`,
+        'No se pudo enviar el email de restablecimiento',
       );
+    }
+  }
+
+  /**
+   * Se manda cuando alguien pide recuperar la contraseña de una dirección que
+   * **no** tiene cuenta.
+   *
+   * Parece raro escribirle a quien no es usuario, pero es lo que resuelve el
+   * problema sin abrir otro: el dueño de la casilla siempre se entera de qué
+   * pasó, y quien está probando direcciones ajenas no aprende nada, porque la
+   * API responde lo mismo exista o no la cuenta. Es lo que hacen GitHub y Slack.
+   */
+  async enviarCuentaInexistente(email: string): Promise<void> {
+    const from = process.env.MAIL_FROM ?? process.env.SMTP_USER ?? '';
+    const transporter = this.getTransporter();
+    const baseUrl = process.env.FRONTEND_URL ?? 'http://localhost:3001';
+    const registroUrl = `${baseUrl}/register`;
+
+    try {
+      await transporter.sendMail({
+        from,
+        to: email,
+        subject: 'Pedido de restablecimiento — Smart Travel Planner',
+        text:
+          `Alguien pidió restablecer la contraseña de esta dirección, pero no hay ninguna cuenta asociada.\n\n` +
+          `Si fuiste vos, puede que te hayas registrado con otro email. También podés crear una cuenta acá:\n${registroUrl}\n\n` +
+          `Si no fuiste vos, ignorá este mensaje: no hay nada que hacer.`,
+        html:
+          `<p>Alguien pidió restablecer la contraseña de esta dirección, pero no hay ninguna cuenta asociada.</p>` +
+          `<p>Si fuiste vos, puede que te hayas registrado con otro email. También podés <a href="${registroUrl}">crear una cuenta</a>.</p>` +
+          `<p>Si no fuiste vos, ignorá este mensaje: no hay nada que hacer.</p>`,
+      });
+      this.logger.log(`Email de cuenta inexistente enviado a ${email}`);
+    } catch (error) {
+      const mensaje = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Falló el envío de email a ${email}: ${mensaje}`);
+      throw new InternalServerErrorException('No se pudo enviar el email');
     }
   }
 }
