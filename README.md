@@ -134,14 +134,16 @@ Un usuario sin suscripción vigente está en el plan Gratis. Los `consumos` no t
 | Lugares turísticos | Google Places API (New) — Text Search | Cacheados en la tabla `lugares` |
 | Geocoding | Nominatim / OpenStreetMap | Gratis y sin API key; ubica actividades sin coordenadas |
 | Mapas | Leaflet + OpenStreetMap | Sin API key |
-| Vuelos | Sky Scrapper, vía RapidAPI | Mirror no oficial de Skyscanner |
+| Vuelos | [Ignav](https://ignav.com) | Tarifas en vivo y links de reserva |
 | Alojamiento | Booking.com (`booking-com15`), vía RapidAPI | Mirror no oficial |
 | Email | Nodemailer + SMTP (Gmail) | Recuperación de contraseña |
 | Pagos y suscripciones | Mercado Pago — API de Suscripciones (`preapproval`) + webhooks | SDK oficial `mercadopago`, cobro en pesos — ver [docs/PLANES.md](docs/PLANES.md) |
 
-Vuelos y alojamiento usan el free tier de RapidAPI, que es **muy** chico: el plan BASIC de Sky Scrapper son 20 requests por mes y **cada búsqueda de vuelos gasta 4** (resolver los dos aeropuertos + ida y vuelta), o sea 5 búsquedas mensuales. Cuando se agota, la API devuelve **429 y eso no es un bug**; el backend lo propaga como un 429 con un mensaje claro en vez de confundirlo con un destino irresoluble. Ojo que el ciclo de RapidAPI se cuenta **desde el día de alta de la suscripción, no desde el 1° de cada mes**. Cada API tiene su cuota propia: que se agote la de vuelos no afecta a la de alojamiento.
+Los vuelos salen de Ignav: **1.000 requests gratis por única vez** y después USD 2 cada 1.000, sin mínimo mensual. Cada búsqueda gasta **2 requests de tarifas** (ida y vuelta); la resolución de aeropuertos se cachea en memoria, así que sólo cuesta la primera vez que aparece una ciudad. Cuando se agota el crédito la API devuelve **402** (falta cargar facturación) o **429** (tope de gasto propio) y **eso no es un bug**: el backend los propaga como un 429 con un mensaje claro en vez de confundirlo con un destino irresoluble.
 
-Para desarrollar sin gastar cuota existe `RAPIDAPI_MOCK=true`, que usa datos fixture.
+El alojamiento sigue en el free tier de RapidAPI, que es **muy** chico. Ojo que el ciclo de RapidAPI se cuenta **desde el día de alta de la suscripción, no desde el 1° de cada mes**. Cada API tiene su cuota propia: que se agote la de alojamiento no afecta a la de vuelos.
+
+Para desarrollar sin gastar nada existen `IGNAV_MOCK=true` (vuelos) y `RAPIDAPI_MOCK=true` (alojamiento, y vuelos si no se definió la anterior), que usan datos fixture.
 
 ## Stack Tecnológico
 

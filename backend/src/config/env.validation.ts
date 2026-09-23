@@ -24,11 +24,21 @@ class EnvironmentVariables {
   @IsString()
   GOOGLE_PLACES_API_KEY: string;
 
+  // Vuelos (ignav.com). Se crea la cuenta gratis y se copia la key del panel.
+  @IsString()
+  IGNAV_API_KEY: string;
+
+  // "true" para usar datos fixture de vuelos sin gastar requests de Ignav.
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  IGNAV_MOCK?: string;
+
+  // Alojamiento (Booking COM via RapidAPI).
   @IsString()
   RAPIDAPI_KEY: string;
 
-  // "true" para usar datos fixture en vuelos/alojamiento sin pegarle a RapidAPI
-  // (evita quemar la cuota del free tier durante desarrollo/pruebas).
+  // "true" para usar datos fixture de alojamiento sin pegarle a RapidAPI.
+  // También sirve de fallback para IGNAV_MOCK.
   @IsOptional()
   @IsIn(['true', 'false'])
   RAPIDAPI_MOCK?: string;

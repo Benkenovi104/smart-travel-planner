@@ -7,7 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service.js';
 import { PlanesService } from '../planes/planes.service.js';
 import { TipoConsumo } from '../../generated/prisma/enums.js';
-import { SkyScrapperService } from './sky-scrapper.service.js';
+import { IgnavService } from './ignav.service.js';
 import { PresupuestosService } from '../presupuestos/presupuestos.service.js';
 
 const MAX_OPCIONES = 5;
@@ -16,7 +16,7 @@ const MAX_OPCIONES = 5;
 export class VuelosService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly skyScrapper: SkyScrapperService,
+    private readonly ignav: IgnavService,
     private readonly presupuestos: PresupuestosService,
     private readonly planes: PlanesService,
   ) {}
@@ -26,8 +26,8 @@ export class VuelosService {
     if (!viaje) throw new NotFoundException('Viaje no encontrado');
     if (viaje.id_usuario !== id_usuario) throw new ForbiddenException();
 
-    // Antes de pegarle a Sky Scrapper: cada búsqueda gasta 4 requests de una cuota
-    // que es de toda la app.
+    // Antes de pegarle a Ignav: cada búsqueda gasta 2 requests de tarifas (ida y
+    // vuelta) de un crédito que es de toda la app.
     await this.planes.verificar(
       id_usuario,
       TipoConsumo.BUSCAR_VUELOS,
@@ -35,8 +35,8 @@ export class VuelosService {
     );
 
     const [origen, destino] = await Promise.all([
-      this.skyScrapper.resolverAeropuerto(viaje.origen),
-      this.skyScrapper.resolverAeropuerto(viaje.destino_principal),
+      this.ignav.resolverAeropuerto(viaje.origen),
+      this.ignav.resolverAeropuerto(viaje.destino_principal),
     ]);
 
     if (!origen || !destino) {
@@ -50,13 +50,13 @@ export class VuelosService {
     const adultos = viaje.cantidadPersonas ?? 1;
 
     const [vuelosIda, vuelosVuelta] = await Promise.all([
-      this.skyScrapper.buscarVuelos({
+      this.ignav.buscarVuelos({
         origen,
         destino,
         fecha: fechaIda,
         adultos,
       }),
-      this.skyScrapper.buscarVuelos({
+      this.ignav.buscarVuelos({
         origen: destino,
         destino: origen,
         fecha: fechaVuelta,
@@ -80,7 +80,7 @@ export class VuelosService {
       vueltaOrdenada.length || idaOrdenada.length,
     );
 
-    // Sky Scrapper manda la hora local del aeropuerto SIN zona horaria
+    // Ignav manda la hora local del aeropuerto SIN zona horaria
     // ("2026-09-14T21:55:00"). `new Date()` la interpreta en la zona del server
     // (UTC-3 acá) y la guardaría corrida 3 horas, al punto de mostrar la salida
     // un día después del que es. Se le agrega la Z para persistir el horario de

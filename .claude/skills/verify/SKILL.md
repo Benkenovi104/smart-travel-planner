@@ -63,7 +63,8 @@ del diálogo). Scopeá con `page.getByRole('dialog').getByRole('button', ...)`.
   `new PrismaClient({ adapter: new PrismaPg(new Pool({ connectionString })) })`.
   El client compilado vive en `backend/dist/generated/prisma/client.js`
   (`backend/generated/` es TypeScript sin compilar).
-- `RAPIDAPI_MOCK=true` en `.env` usa fixtures y **ignora `adultos` y
-  `habitaciones`**. Para ver los parámetros reales de Booking, arrancá con
-  `RAPIDAPI_MOCK=false node dist/src/main`. Cuidado: el free tier tira 429 si
-  repetís las búsquedas.
+- `IGNAV_MOCK=true` (vuelos) y `RAPIDAPI_MOCK=true` (alojamiento) en `.env`
+  usan fixtures y **ignoran `adultos` y `habitaciones`**. Para ver los
+  parámetros reales, arrancá con la que te interese en `false`. Los vuelos ya no
+  tienen cuota mensual (Ignav cobra por uso), pero cada búsqueda cuesta plata;
+  el free tier de Booking sí tira 429 si repetís las búsquedas.

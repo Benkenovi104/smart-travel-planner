@@ -13,7 +13,7 @@ cada viaje, porque pega contra servicios externos que se pagan o tienen cuota:
 | Acción | Qué consume |
 |---|---|
 | Generar o regenerar el itinerario | Una llamada a Gemini (~45 s) |
-| Buscar vuelos | 4 requests de Sky Scrapper (RapidAPI) |
+| Buscar vuelos | 2 requests de tarifas de Ignav (+ el lookup de aeropuertos, cacheado) |
 | Buscar alojamiento | 2 requests de Booking (RapidAPI) + ~5 de Google Places + 1 de Gemini |
 | Editar, ver el mapa, ver el presupuesto, optimizar | Nada: es cómputo propio |
 
@@ -89,7 +89,7 @@ El período dura un mes y se cuenta **desde el día en que empezó el plan**, no
   disparaba sola al entrar al paso de alojamiento; con planes eso le gastaba al usuario gratis
   su única búsqueda sin haberla pedido, así que pasó a ser un botón.
 - **Editar, mover y borrar actividades, ver el mapa y ver el presupuesto nunca cuentan.**
-- **Los datos de prueba también cuentan.** Con `RAPIDAPI_MOCK=true` las búsquedas no gastan
+- **Los datos de prueba también cuentan.** Con `IGNAV_MOCK=true` / `RAPIDAPI_MOCK=true` las búsquedas no gastan
   cuota externa, pero sí consumen el límite del plan, para poder probar el sistema de planes
   sin gastar nada.
 
@@ -117,13 +117,14 @@ actuales:
 
 | API | Cuota mensual | Por búsqueda | Búsquedas por mes, **sumando a todos los usuarios** |
 |---|---|---|---|
-| Sky Scrapper (vuelos) | 20 requests | 4 | **5** |
+| Ignav (vuelos) | sin cuota mensual: 1.000 gratis y después USD 2 cada 1.000 | 2 | **sin tope** (límite de gasto, no de requests) |
 | Booking (alojamiento) | 50 requests | 2 | **25** |
 
-Un solo usuario Base con cinco viajes agota la cuota de vuelos de todos en un mes. **Antes
-de abrir los planes pagos al público hay que pasar esas dos APIs a un plan pago.** Hasta
-entonces, el sistema funciona pero "sin límite" es una promesa que la infraestructura no
-puede cumplir.
+Los vuelos dejaron de ser el cuello de botella al pasar a Ignav, que cobra por uso en vez
+de cortar por cuota: mil búsquedas cuestan unos USD 4. **El que queda es el alojamiento**,
+con 25 búsquedas mensuales para toda la app; antes de abrir los planes pagos al público hay
+que pasar Booking a un plan pago. Hasta entonces, "sin límite" sigue siendo una promesa que
+la infraestructura no puede cumplir del todo.
 
 **Protección contra abuso.** Todos los planes, incluido Premium, tienen además un tope
 técnico **por usuario, en las últimas 24 horas**:
@@ -178,7 +179,8 @@ nada: da igual cuántas veces o en qué orden lleguen los avisos.
 
 ## Decisiones pendientes
 
-- **Pasar Sky Scrapper y Booking a planes pagos** de RapidAPI antes de lanzar (ver arriba).
+- **Pasar Booking a un plan pago** de RapidAPI antes de lanzar (ver arriba). Vuelos ya está
+  resuelto con Ignav, que cobra por uso.
 - **Túnel: ngrok mientras se desarrolla en la máquina.** Con ngrok el pago funciona, pero los avisos
   de Mercado Pago no llegan. **Con la app desplegada el túnel no hace falta**: el webhook apunta a la
   URL pública del backend y ahí se puede verificar que llegue el aviso del cobro mensual. En el

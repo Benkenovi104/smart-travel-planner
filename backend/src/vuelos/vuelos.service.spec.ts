@@ -7,7 +7,7 @@ import {
 import { describe, beforeEach, it, expect, jest } from '@jest/globals';
 import { VuelosService } from './vuelos.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { SkyScrapperService } from './sky-scrapper.service.js';
+import { IgnavService } from './ignav.service.js';
 import { PresupuestosService } from '../presupuestos/presupuestos.service.js';
 import { PlanesService } from '../planes/planes.service.js';
 import { LimitePlanException } from '../planes/limite-plan.exception.js';
@@ -15,7 +15,7 @@ import { LimitePlanException } from '../planes/limite-plan.exception.js';
 describe('VuelosService', () => {
   let service: VuelosService;
   let prisma: any;
-  let sky: any;
+  let ignav: any;
   let presupuestos: any;
   let planes: any;
 
@@ -51,7 +51,7 @@ describe('VuelosService', () => {
         }),
       ),
     };
-    sky = {
+    ignav = {
       resolverAeropuerto: jest.fn(),
       buscarVuelos: jest.fn(),
     };
@@ -61,7 +61,7 @@ describe('VuelosService', () => {
       providers: [
         VuelosService,
         { provide: PrismaService, useValue: prisma },
-        { provide: SkyScrapperService, useValue: sky },
+        { provide: IgnavService, useValue: ignav },
         { provide: PresupuestosService, useValue: presupuestos },
         { provide: PlanesService, useValue: planes },
       ],
@@ -78,7 +78,7 @@ describe('VuelosService', () => {
 
   it('lanza BadRequest si no se puede resolver origen o destino', async () => {
     prisma.viaje.findUnique.mockResolvedValue(viaje);
-    sky.resolverAeropuerto.mockResolvedValue(null);
+    ignav.resolverAeropuerto.mockResolvedValue(null);
     await expect(service.buscarYGuardar(1, 5)).rejects.toBeInstanceOf(
       BadRequestException,
     );
@@ -86,20 +86,48 @@ describe('VuelosService', () => {
 
   it('rankea por precio y combina ida+vuelta, guardando hasta 5 opciones', async () => {
     prisma.viaje.findUnique.mockResolvedValue(viaje);
-    sky.resolverAeropuerto.mockImplementation(async (n: string) => ({
-      skyId: n,
-      entityId: 'E',
+    ignav.resolverAeropuerto.mockImplementation(async (n: string) => ({
+      iata: n.slice(0, 3).toUpperCase(),
+      ciudad: n,
     }));
     // ida desordenada por precio
-    sky.buscarVuelos
+    ignav.buscarVuelos
       .mockResolvedValueOnce([
-        { origen: 'Buenos Aires', destino: 'Mendoza', fecha: '2026-09-10', aerolinea: 'B', precio: 120, duracionMinutos: 100 },
-        { origen: 'Buenos Aires', destino: 'Mendoza', fecha: '2026-09-10', aerolinea: 'A', precio: 80, duracionMinutos: 110 },
+        {
+          origen: 'Buenos Aires',
+          destino: 'Mendoza',
+          fecha: '2026-09-10',
+          aerolinea: 'B',
+          precio: 120,
+          duracionMinutos: 100,
+        },
+        {
+          origen: 'Buenos Aires',
+          destino: 'Mendoza',
+          fecha: '2026-09-10',
+          aerolinea: 'A',
+          precio: 80,
+          duracionMinutos: 110,
+        },
       ])
       // vuelta
       .mockResolvedValueOnce([
-        { origen: 'Mendoza', destino: 'Buenos Aires', fecha: '2026-09-13', aerolinea: 'A', precio: 90, duracionMinutos: 105 },
-        { origen: 'Mendoza', destino: 'Buenos Aires', fecha: '2026-09-13', aerolinea: 'B', precio: 130, duracionMinutos: 100 },
+        {
+          origen: 'Mendoza',
+          destino: 'Buenos Aires',
+          fecha: '2026-09-13',
+          aerolinea: 'A',
+          precio: 90,
+          duracionMinutos: 105,
+        },
+        {
+          origen: 'Mendoza',
+          destino: 'Buenos Aires',
+          fecha: '2026-09-13',
+          aerolinea: 'B',
+          precio: 130,
+          duracionMinutos: 100,
+        },
       ]);
     prisma.opcionVuelo.findMany.mockResolvedValue([]);
 
@@ -126,16 +154,34 @@ describe('VuelosService', () => {
 
   it('guarda el detalle de cada tramo por separado, no sólo el total', async () => {
     prisma.viaje.findUnique.mockResolvedValue(viaje);
-    sky.resolverAeropuerto.mockImplementation(async (n: string) => ({
-      skyId: n,
-      entityId: 'E',
+    ignav.resolverAeropuerto.mockImplementation(async (n: string) => ({
+      iata: n.slice(0, 3).toUpperCase(),
+      ciudad: n,
     }));
-    sky.buscarVuelos
+    ignav.buscarVuelos
       .mockResolvedValueOnce([
-        { origen: 'Buenos Aires', destino: 'Mendoza', fecha: '2026-09-10T21:55:00', llegada: '2026-09-11T01:20:00', aerolinea: 'Ethiopian', precio: 80, duracionMinutos: 205, escalas: 1 },
+        {
+          origen: 'Buenos Aires',
+          destino: 'Mendoza',
+          fecha: '2026-09-10T21:55:00',
+          llegada: '2026-09-11T01:20:00',
+          aerolinea: 'Ethiopian',
+          precio: 80,
+          duracionMinutos: 205,
+          escalas: 1,
+        },
       ])
       .mockResolvedValueOnce([
-        { origen: 'Mendoza', destino: 'Buenos Aires', fecha: '2026-09-13T09:00:00', llegada: '2026-09-13T10:45:00', aerolinea: 'LATAM', precio: 90, duracionMinutos: 105, escalas: 0 },
+        {
+          origen: 'Mendoza',
+          destino: 'Buenos Aires',
+          fecha: '2026-09-13T09:00:00',
+          llegada: '2026-09-13T10:45:00',
+          aerolinea: 'LATAM',
+          precio: 90,
+          duracionMinutos: 105,
+          escalas: 0,
+        },
       ]);
     prisma.opcionVuelo.findMany.mockResolvedValue([]);
 
@@ -169,14 +215,23 @@ describe('VuelosService', () => {
 
   it('no corre las horas del vuelo por la zona horaria del servidor', async () => {
     prisma.viaje.findUnique.mockResolvedValue(viaje);
-    sky.resolverAeropuerto.mockImplementation(async (n: string) => ({
-      skyId: n,
-      entityId: 'E',
+    ignav.resolverAeropuerto.mockImplementation(async (n: string) => ({
+      iata: n.slice(0, 3).toUpperCase(),
+      ciudad: n,
     }));
-    // Sky Scrapper manda la hora local del aeropuerto, sin zona.
-    sky.buscarVuelos
+    // Ignav manda la hora local del aeropuerto, sin zona.
+    ignav.buscarVuelos
       .mockResolvedValueOnce([
-        { origen: 'Buenos Aires', destino: 'Mendoza', fecha: '2026-09-10T21:55:00', llegada: '2026-09-10T23:40:00', aerolinea: 'A', precio: 80, duracionMinutos: 105, escalas: 0 },
+        {
+          origen: 'Buenos Aires',
+          destino: 'Mendoza',
+          fecha: '2026-09-10T21:55:00',
+          llegada: '2026-09-10T23:40:00',
+          aerolinea: 'A',
+          precio: 80,
+          duracionMinutos: 105,
+          escalas: 0,
+        },
       ])
       .mockResolvedValueOnce([]);
     prisma.opcionVuelo.findMany.mockResolvedValue([]);
@@ -197,21 +252,25 @@ describe('VuelosService', () => {
 
     // Sale 21:55 del día 10: se guarda tal cual, no corrido al día siguiente
     // por interpretar el string en la zona del server.
-    expect(creados[0].fechaSalida.toISOString()).toBe('2026-09-10T21:55:00.000Z');
-    expect(creados[0].llegada_ida.toISOString()).toBe('2026-09-10T23:40:00.000Z');
+    expect(creados[0].fechaSalida.toISOString()).toBe(
+      '2026-09-10T21:55:00.000Z',
+    );
+    expect(creados[0].llegada_ida.toISOString()).toBe(
+      '2026-09-10T23:40:00.000Z',
+    );
   });
 
   describe('plan', () => {
     const preparar = () => {
       prisma.viaje.findUnique.mockResolvedValue(viaje);
-      sky.resolverAeropuerto.mockImplementation(async (n: string) => ({
-        skyId: n,
-        entityId: 'E',
+      ignav.resolverAeropuerto.mockImplementation(async (n: string) => ({
+        iata: n.slice(0, 3).toUpperCase(),
+        ciudad: n,
       }));
       prisma.opcionVuelo.findMany.mockResolvedValue([]);
     };
 
-    it('si el plan no permite buscar vuelos, no le pega a Sky Scrapper', async () => {
+    it('si el plan no permite buscar vuelos, no le pega a Ignav', async () => {
       preparar();
       planes.verificar.mockRejectedValue(
         new LimitePlanException({
@@ -229,14 +288,23 @@ describe('VuelosService', () => {
         LimitePlanException,
       );
       expect(planes.verificar).toHaveBeenCalledWith(1, 'BUSCAR_VUELOS', 5);
-      expect(sky.resolverAeropuerto).not.toHaveBeenCalled();
-      expect(sky.buscarVuelos).not.toHaveBeenCalled();
+      expect(ignav.resolverAeropuerto).not.toHaveBeenCalled();
+      expect(ignav.buscarVuelos).not.toHaveBeenCalled();
     });
 
     it('registra el consumo dentro de la transacción cuando encuentra vuelos', async () => {
       preparar();
-      sky.buscarVuelos.mockResolvedValue([
-        { origen: 'Buenos Aires', destino: 'Mendoza', fecha: '2026-09-10T08:00:00', llegada: null, aerolinea: 'A', precio: 80, duracionMinutos: 100, escalas: 0 },
+      ignav.buscarVuelos.mockResolvedValue([
+        {
+          origen: 'Buenos Aires',
+          destino: 'Mendoza',
+          fecha: '2026-09-10T08:00:00',
+          llegada: null,
+          aerolinea: 'A',
+          precio: 80,
+          duracionMinutos: 100,
+          escalas: 0,
+        },
       ]);
 
       await service.buscarYGuardar(1, 5);
@@ -251,7 +319,7 @@ describe('VuelosService', () => {
 
     it('una búsqueda sin resultados no gasta el intento', async () => {
       preparar();
-      sky.buscarVuelos.mockResolvedValue([]);
+      ignav.buscarVuelos.mockResolvedValue([]);
 
       await service.buscarYGuardar(1, 5);
 
@@ -260,9 +328,11 @@ describe('VuelosService', () => {
 
     it('si la API falla, no registra consumo', async () => {
       preparar();
-      sky.buscarVuelos.mockRejectedValue(new Error('cuota agotada'));
+      ignav.buscarVuelos.mockRejectedValue(new Error('cuota agotada'));
 
-      await expect(service.buscarYGuardar(1, 5)).rejects.toThrow('cuota agotada');
+      await expect(service.buscarYGuardar(1, 5)).rejects.toThrow(
+        'cuota agotada',
+      );
       expect(planes.registrar).not.toHaveBeenCalled();
     });
   });

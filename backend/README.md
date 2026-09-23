@@ -12,7 +12,8 @@ API REST del [Smart Travel Planner](../README.md), construida con NestJS 11 y Pr
 | Email | Nodemailer + SMTP (Gmail) — mail de recuperación de contraseña |
 | IA | Google Gemini (`@google/genai`) para generación de itinerarios |
 | Lugares reales | Google Places API (New) — Text Search, para fundamentar los itinerarios en POIs verificados |
-| Vuelos y alojamiento | RapidAPI — Sky Scrapper (vuelos) y Booking.com/`booking-com15` (alojamiento) |
+| Vuelos | [Ignav](https://ignav.com) — tarifas en vivo, `POST /api/fares/one-way` |
+| Alojamiento | RapidAPI — Booking.com/`booking-com15` |
 | Pagos | Mercado Pago — SDK oficial `mercadopago` (suscripciones `preapproval` + webhooks) |
 | Docs | Swagger (`@nestjs/swagger`) |
 | Rate limiting | `@nestjs/throttler` |
@@ -54,8 +55,10 @@ Esto arranca dos servicios: `db` (Postgres 16) y `backend`. En el arranque, el b
 | `JWT_SECRET` | Sí | Secreto para firmar JWT. Mínimo 32 caracteres. |
 | `GEMINI_API_KEY` | Sí | API key de Google Gemini, usada para generar itinerarios. |
 | `GOOGLE_PLACES_API_KEY` | Sí | API key con "Places API (New)" habilitada en Google Cloud (requiere billing habilitado). Usada para buscar lugares turísticos reales. |
-| `RAPIDAPI_KEY` | Sí | API key de RapidAPI, con suscripción (free tier) a "Sky Scrapper" (vuelos) y "Booking COM" (`booking-com15`, alojamiento). El plan BASIC de Sky Scrapper da **20 requests/mes** y cada búsqueda de vuelos consume 4, o sea 5 búsquedas mensuales; el ciclo se cuenta desde el alta de la suscripción, no desde el 1° de cada mes. Agotada la cuota la API devuelve 429 (ver reglas de dominio). |
-| `RAPIDAPI_MOCK` | No | `"true"` para usar datos fixture en vuelos/alojamiento sin pegarle a RapidAPI (no gasta cuota; útil en dev/demos). Los hoteles fixture están **por ciudad** (hoy Mendoza y Córdoba, con coordenadas aproximadas); una ciudad sin fixture cae en Mendoza y avisa por log. Default `"false"`. |
+| `IGNAV_API_KEY` | Sí | API key de [ignav.com](https://ignav.com) (cuenta gratis, sin tarjeta; hay que **verificar el mail** o la key responde 403 `email_not_verified`). Da **1.000 requests gratis por única vez** y después USD 2 cada 1.000, sin mínimo. Cada búsqueda consume 2 requests de tarifas; los aeropuertos se cachean en memoria. Sin crédito responde 402 y con el tope de gasto propio 429 — los dos se propagan como 429 (ver reglas de dominio). |
+| `IGNAV_MOCK` | No | `"true"` para usar vuelos fixture sin gastar requests (útil en dev/demos). Si no está definida se cae a `RAPIDAPI_MOCK`. Default `"false"`. |
+| `RAPIDAPI_KEY` | Sí | API key de RapidAPI, con suscripción (free tier) a "Booking COM" (`booking-com15`, alojamiento). El ciclo se cuenta desde el alta de la suscripción, no desde el 1° de cada mes. Agotada la cuota la API devuelve 429 (ver reglas de dominio). |
+| `RAPIDAPI_MOCK` | No | `"true"` para usar datos fixture de alojamiento sin pegarle a RapidAPI (no gasta cuota; útil en dev/demos), y de vuelos si no se definió `IGNAV_MOCK`. Los hoteles fixture están **por ciudad** (hoy Mendoza y Córdoba, con coordenadas aproximadas); una ciudad sin fixture cae en Mendoza y avisa por log. Default `"false"`. |
 | `SMTP_HOST` / `SMTP_PORT` | No | Servidor SMTP para el mail de recuperación de contraseña (Gmail: `smtp.gmail.com` / `465`). |
 | `SMTP_USER` / `SMTP_PASS` | No* | Cuenta remitente y su **App Password** (Gmail requiere 2FA + App Password de 16 chars). *Requeridas para que `forgot-password` funcione; la app arranca sin ellas. |
 | `MAIL_FROM` | No | Dirección "De:" del mail (con Gmail, igual a `SMTP_USER`). |
@@ -101,7 +104,7 @@ Con el servidor corriendo:
 | `itinerarios` | `/api/viajes/:idViaje/itinerario/*` | Generación de itinerario con IA (Gemini), consulta, y edición manual: agregar/editar/eliminar/mover actividades entre días, con historial de cambios (`GET .../cambios`). `POST .../dias/:idDia/optimizar` reordena las paradas del día por cercanía (nearest-neighbor + 2-opt) y corre los horarios a la nueva secuencia. `POST .../geocodificar` ubica por lotes las actividades sin coordenadas. |
 | `presupuestos` | `GET /api/viajes/:idViaje/presupuesto` | Desglose por categoría + detalle de gastos, recalculado automáticamente al mutar el itinerario o al elegir vuelo/alojamiento. |
 | `lugares` | `GET /api/lugares`, `GET /api/lugares/buscar` | `/buscar` trae lugares turísticos reales por destino (Google Places, con rating), cacheados en la tabla `lugares`; si un lugar ya existía (p. ej. creado por la IA), lo **refresca** con los datos de Places. `GET /api/lugares?q=&destino=` busca por texto entre los ya cacheados (una query, sin pegarle a Google) — es lo que usa el autocompletado, con `/buscar` de fallback. También expone el geocoding con Nominatim/OSM (sin API key). |
-| `vuelos` | `/api/viajes/:idViaje/vuelos/*` | Busca opciones reales (Sky Scrapper, ida y vuelta combinadas) y las guarda en `opciones_vuelo` ordenadas por precio. `PATCH .../:idVuelo/seleccionar` elige una (exclusiva por viaje) y recalcula el presupuesto. |
+| `vuelos` | `/api/viajes/:idViaje/vuelos/*` | Busca opciones reales (Ignav, ida y vuelta combinadas) y las guarda en `opciones_vuelo` ordenadas por precio. `PATCH .../:idVuelo/seleccionar` elige una (exclusiva por viaje) y recalcula el presupuesto. |
 | `alojamiento` | `/api/viajes/:idViaje/alojamiento/*` | Ídem con Booking.com, ordenadas por precio por noche. La búsqueda pide una habitación doble cada dos personas (`habitacionesPara`). `PATCH .../:idAlojamiento/seleccionar` elige una y suma `precio_por_noche × noches` al presupuesto. |
 
 Todos los endpoints salvo `auth`, `health`, el catálogo `GET /api/planes` y los de `pagos` (webhook y vuelta del checkout) requieren `Authorization: Bearer <token>` (`JwtAuthGuard`). La estrategia JWT **verifica contra la base que el usuario siga existiendo**: el token de una cuenta borrada da 401 de inmediato, sin esperar a que venza.
@@ -114,7 +117,7 @@ Todos los endpoints salvo `auth`, `health`, el catálogo `GET /api/planes` y los
 - **Los precios ya vienen calculados para todo el grupo.** `OpcionVuelo.precio` es el total ida+vuelta (la búsqueda consulta la API con `cantidadPersonas` adultos) y `precio_por_noche` también está prorrateado. **No hay que multiplicar por la cantidad de personas.** Verificado contra la API de Booking: `grossPrice.value` es el total de la estadía completa (4 noches cuestan exactamente 4× lo que 1 noche), y `room_qty` no altera el precio de una propiedad — sólo cambia qué propiedades tienen disponibilidad.
 - **La búsqueda de lugares está acotada a categorías turísticas.** `GET /api/lugares/buscar` consulta Google Places sólo por las 8 categorías de `CATEGORIAS_TURISTICAS` (museo, atracción turística, sitio histórico, monumento, parque, mirador, restaurante, café). Un POI que no cae en ninguna —por ejemplo un **estadio de fútbol**— no se cachea y por lo tanto **no aparece en el autocompletado por su nombre** (`GET /api/lugares?q=`), que sólo busca sobre lo ya cacheado. Ej.: buscando "kempes" en Córdoba aparece "Parque del Kempes" (entró como `parque`), pero no el "Estadio Mario Alberto Kempes". El usuario igual puede tipear el nombre completo y agregarlo como **texto libre**: la actividad se guarda sin `id_lugar` (sin rating ni categoría reales) y las coordenadas se resuelven después con Nominatim. Para incluir un tipo nuevo, agregarlo a `CATEGORIAS_TURISTICAS` en `lugares/lugares.service.ts`.
 
-> Nota: los datos de vuelos/alojamiento vienen de mirrors no oficiales de Skyscanner y Booking.com en RapidAPI — son informativos/de simulación, no hay integración de reserva real. Para desarrollar sin gastar cuota, ver `RAPIDAPI_MOCK`.
+> Nota: los vuelos vienen de Ignav (tarifas en vivo) y el alojamiento de un mirror no oficial de Booking.com en RapidAPI — son informativos, no hay integración de reserva real. Para desarrollar sin gastar cuota, ver `IGNAV_MOCK` y `RAPIDAPI_MOCK`.
 
 ## Planes y pagos
 
@@ -181,7 +184,7 @@ Corre como web service gratuito de Render, construido con el `Dockerfile` de est
 | `FRONTEND_URL` | La URL de Vercel: origen de CORS y base del link de reseteo de contraseña. |
 | `MP_BACK_URL` | `https://<servicio>.onrender.com/api/pagos/volver`. |
 | `MP_ACCESS_TOKEN` / `MP_PAYER_EMAIL_PRUEBA` | Siguen siendo los de las cuentas de prueba: nadie puede pagar dinero real. |
-| `RAPIDAPI_MOCK` | `"false"`: datos reales de vuelos y alojamiento. Ojo con la cuota, que es de **5 búsquedas de vuelos por mes para toda la app**; con `"true"` se usan datos fixture y no se gasta nada. |
+| `IGNAV_MOCK` / `RAPIDAPI_MOCK` | `"false"`: datos reales de vuelos y alojamiento. Los vuelos ya no tienen cuota mensual (Ignav cobra por uso), pero el alojamiento sigue con el free tier de RapidAPI; con `"true"` se usan datos fixture y no se gasta nada. |
 | `THROTTLE_LIMIT` | Conviene subirlo (ej. `300`): ver la nota sobre la IP, más abajo. |
 | `NODE_ENV` | `production`. |
 
@@ -198,7 +201,7 @@ npm run test:e2e   # end-to-end (~90s, hace 1 llamada real a Gemini)
 ```
 
 - **Unitarios** (17 suites, 207 tests): cada service aislado, mockeando Prisma y las APIs externas (Gemini/Google/RapidAPI/Mail) por inyección de dependencias; bcrypt/crypto corren reales. Cubren auth (register/login/cambio/forgot/reset, incluido que un fallo de envío del mail no cambie la respuesta genérica), la estrategia JWT (rechaza tokens de cuentas borradas), borrado de cuenta con cascade, IDOR y edición de viajes (validación del rango de fechas, reajuste de los días del itinerario, recálculo del presupuesto), matemática del presupuesto (incluidos vuelo y alojamiento elegidos), ranking y selección de vuelos/alojamiento, el cacheo/refresco y la búsqueda por texto de lugares, la optimización de recorrido por día (nearest-neighbor + 2-opt), los guards de itinerarios, el motor de planes (plan vigente, períodos anclados al día del pago, límites y tope diario) y los pagos (suscribir, cancelar, firma del webhook, idempotencia, cobros rechazados, subida de plan y respaldo de renovaciones).
-- **E2E** (`test/main-flow.e2e-spec.ts`): bootstrapea la `AppModule` real y recorre el flujo completo **contra la base configurada en `.env`** con **Gemini real** y `RAPIDAPI_MOCK=true`: registro → login → crear viaje (y 409 con un borrador abierto) → generar itinerario con IA → presupuesto → límite del plan Gratis (403) → endpoints de pagos que no llaman a Mercado Pago (validación, 404, webhook con firma inválida, vuelta del checkout) → vuelos/alojamiento → IDOR 403. Crea y borra sus propios usuarios (se autolimpia).
+- **E2E** (`test/main-flow.e2e-spec.ts`): bootstrapea la `AppModule` real y recorre el flujo completo **contra la base configurada en `.env`** con **Gemini real**, `IGNAV_MOCK=true` y `RAPIDAPI_MOCK=true`: registro → login → crear viaje (y 409 con un borrador abierto) → generar itinerario con IA → presupuesto → límite del plan Gratis (403) → endpoints de pagos que no llaman a Mercado Pago (validación, 404, webhook con firma inválida, vuelta del checkout) → vuelos/alojamiento → IDOR 403. Crea y borra sus propios usuarios (se autolimpia).
 
 ## Base de datos
 

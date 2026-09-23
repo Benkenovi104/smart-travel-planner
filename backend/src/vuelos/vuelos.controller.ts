@@ -30,7 +30,7 @@ export class VuelosController {
   @Post('buscar')
   @ApiOperation({
     summary:
-      'Buscar opciones de vuelo reales (Sky Scrapper) para un viaje y guardarlas, ordenadas por precio',
+      'Buscar opciones de vuelo reales (Ignav) para un viaje y guardarlas, ordenadas por precio',
   })
   @ApiResponse({
     status: 201,

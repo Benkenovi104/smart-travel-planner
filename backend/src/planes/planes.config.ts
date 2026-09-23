@@ -40,7 +40,8 @@ export const LIMITES: Record<Plan, LimitesPlan> = {
     regenerarPorViaje: null,
     optimizar: true,
     alojamientoPorViaje: null,
-    // No es "sin límite": la cuota de Sky Scrapper es de toda la app.
+    // No es "sin límite": cada búsqueda le cuesta plata a la app (Ignav cobra
+    // por uso), así que el tope por viaje sigue teniendo sentido.
     vuelosPorViaje: 3,
   },
 };
