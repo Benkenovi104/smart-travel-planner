@@ -17,7 +17,7 @@ export class MailService {
     if (this.transporter) return this.transporter;
 
     const host = process.env.SMTP_HOST ?? 'smtp.gmail.com';
-    const port = Number(process.env.SMTP_PORT ?? 465);
+    const port = Number(process.env.SMTP_PORT ?? 587);
     const user = process.env.SMTP_USER;
     const pass = process.env.SMTP_PASS;
 
@@ -63,7 +63,7 @@ export class MailService {
       const mensaje = error instanceof Error ? error.message : String(error);
       this.logger.error(`Falló el envío de email a ${email}: ${mensaje}`);
       throw new InternalServerErrorException(
-        'No se pudo enviar el email de restablecimiento',
+        `No se pudo enviar el email de restablecimiento (${mensaje})`,
       );
     }
   }
