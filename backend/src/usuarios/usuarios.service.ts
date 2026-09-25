@@ -38,6 +38,7 @@ const USUARIO_SELECT = {
   nombre: true,
   apellido: true,
   email: true,
+  email_verificado: true,
   fecha_registro: true,
   perfil_viajero: {
     select: {

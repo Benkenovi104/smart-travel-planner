@@ -25,6 +25,7 @@ describe('AuthService', () => {
   let mail: {
     enviarResetPassword: jest.Mock;
     enviarCuentaInexistente: jest.Mock;
+    enviarCodigoVerificacion: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -40,6 +41,7 @@ describe('AuthService', () => {
     mail = {
       enviarResetPassword: jest.fn(async () => undefined),
       enviarCuentaInexistente: jest.fn(async () => undefined),
+      enviarCodigoVerificacion: jest.fn(async () => undefined),
     };
 
     const module: TestingModule = await Test.createTestingModule({

@@ -31,6 +31,7 @@ export interface Usuario {
   nombre: string | null;
   apellido: string | null;
   email: string;
+  emailVerificado: boolean;
   fechaRegistro: string | null;
   perfil: PerfilViajero | null;
   intereses: InteresUsuario[];

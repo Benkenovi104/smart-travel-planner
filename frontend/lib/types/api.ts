@@ -63,6 +63,7 @@ export interface MeApi {
   nombre: string | null;
   apellido: string | null;
   email: string;
+  email_verificado: boolean;
   fecha_registro: string | null;
   perfil_viajero: PerfilViajeroApi | null;
   usuario_intereses: UsuarioInteresApi[];

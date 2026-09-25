@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { randomBytes, createHash } from 'crypto';
+import { randomBytes, randomInt, createHash } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { MailService } from '../mail/mail.service.js';
 import { RegisterDto } from './dto/register.dto.js';
@@ -19,6 +19,8 @@ import type { JwtPayload } from './strategies/jwt.strategy.js';
 
 const SALT_ROUNDS = 12;
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hora
+const VERIF_HORAS = 24;
+const VERIF_TOKEN_TTL_MS = VERIF_HORAS * 60 * 60 * 1000;
 const MENSAJE_FORGOT_GENERICO =
   'Si el email está registrado, te enviamos un enlace para restablecer la contraseña.';
 
@@ -34,6 +36,32 @@ export class AuthService {
 
   private hashToken(token: string): string {
     return createHash('sha256').update(token).digest('hex');
+  }
+
+  /**
+   * Los campos del usuario que pueden salir del backend.
+   *
+   * Se enumera lo que se muestra en vez de quitar lo que no: con un
+   * `const { password_hash, ...resto }` la fila entera queda expuesta por
+   * defecto y cada columna nueva se filtra sola. Así pasaba con
+   * `reset_token_hash`, que viajaba en la respuesta del login.
+   */
+  private publico(usuario: {
+    id_usuario: number;
+    nombre: string | null;
+    apellido: string | null;
+    email: string;
+    fecha_registro: Date;
+    email_verificado: boolean;
+  }) {
+    return {
+      id_usuario: usuario.id_usuario,
+      nombre: usuario.nombre,
+      apellido: usuario.apellido,
+      email: usuario.email,
+      fecha_registro: usuario.fecha_registro,
+      email_verificado: usuario.email_verificado,
+    };
   }
 
   async register(dto: RegisterDto) {
@@ -61,11 +89,103 @@ export class AuthService {
         apellido: true,
         email: true,
         fecha_registro: true,
+        email_verificado: true,
       },
     });
 
+    // El alta no se cae si el mail no sale: la cuenta queda creada y sin
+    // verificar, y el usuario puede pedir el código de nuevo desde la app.
+    // Abortar el registro por un SMTP caído sería mucho peor.
+    await this.mandarCodigoVerificacion(usuario.id_usuario, usuario.email);
+
     const token = this.signToken(usuario.id_usuario, usuario.email);
     return { usuario, access_token: token };
+  }
+
+  /**
+   * Genera un código nuevo, lo guarda hasheado y lo manda por mail. Pisa el
+   * anterior a propósito: si alguien pide reenviar, el viejo deja de servir.
+   */
+  private async mandarCodigoVerificacion(
+    id_usuario: number,
+    email: string,
+  ): Promise<void> {
+    // 6 dígitos con randomInt, que es criptográficamente seguro. Math.random()
+    // sería adivinable conociendo el momento del registro.
+    const codigo = String(randomInt(0, 1_000_000)).padStart(6, '0');
+
+    await this.prisma.usuario.update({
+      where: { id_usuario },
+      data: {
+        verif_token_hash: this.hashToken(codigo),
+        verif_token_expira: new Date(Date.now() + VERIF_TOKEN_TTL_MS),
+      },
+    });
+
+    try {
+      await this.mail.enviarCodigoVerificacion(email, codigo, VERIF_HORAS);
+    } catch (error) {
+      const mensaje = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `No se pudo enviar el código de verificación a ${email}: ${mensaje}`,
+      );
+    }
+  }
+
+  async verificarEmail(id_usuario: number, codigo: string) {
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id_usuario },
+    });
+    if (!usuario) throw new UnauthorizedException('Credenciales inválidas');
+
+    if (usuario.email_verificado) {
+      // Idempotente: reintentar con el código ya usado no es un error para el
+      // usuario, que lo único que quiere saber es si su cuenta está lista.
+      return {
+        message: 'El email ya estaba verificado',
+        email_verificado: true,
+      };
+    }
+
+    const vigente =
+      usuario.verif_token_hash === this.hashToken(codigo) &&
+      usuario.verif_token_expira !== null &&
+      usuario.verif_token_expira.getTime() > Date.now();
+
+    if (!vigente) {
+      throw new BadRequestException('Código inválido o vencido');
+    }
+
+    await this.prisma.usuario.update({
+      where: { id_usuario },
+      data: {
+        email_verificado: true,
+        verif_token_hash: null,
+        verif_token_expira: null,
+      },
+    });
+
+    return {
+      message: 'Email verificado correctamente',
+      email_verificado: true,
+    };
+  }
+
+  async reenviarVerificacion(id_usuario: number) {
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id_usuario },
+    });
+    if (!usuario) throw new UnauthorizedException('Credenciales inválidas');
+
+    if (usuario.email_verificado) {
+      return {
+        message: 'El email ya estaba verificado',
+        email_verificado: true,
+      };
+    }
+
+    await this.mandarCodigoVerificacion(usuario.id_usuario, usuario.email);
+    return { message: 'Te mandamos un código nuevo', email_verificado: false };
   }
 
   async login(dto: LoginDto) {
@@ -86,10 +206,9 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
-    const { password_hash: _, ...usuarioSinPassword } = usuario;
     const token = this.signToken(usuario.id_usuario, usuario.email);
 
-    return { usuario: usuarioSinPassword, access_token: token };
+    return { usuario: this.publico(usuario), access_token: token };
   }
 
   async changePassword(id_usuario: number, dto: ChangePasswordDto) {

@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as auth from '../api/auth';
 import * as usuarios from '../api/usuarios';
+import { qk } from './keys';
 
 export function useLogin() {
   const qc = useQueryClient();
@@ -38,6 +39,22 @@ export function useResetPassword() {
 
 export function useChangePassword() {
   return useMutation({ mutationFn: auth.changePassword });
+}
+
+/**
+ * Verificar y reenviar invalidan : el banner de "confirmá tu email" sale de
+ * ahí y tiene que desaparecer solo apenas se confirma.
+ */
+export function useVerificarEmail() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: auth.verificarEmail,
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.me }),
+  });
+}
+
+export function useReenviarVerificacion() {
+  return useMutation({ mutationFn: auth.reenviarVerificacion });
 }
 
 /**

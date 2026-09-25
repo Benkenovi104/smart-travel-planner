@@ -43,9 +43,25 @@ export function borradorExistente(
 }
 
 /**
+ * 403 de una acción que gasta plata pedida por una cuenta que todavía no
+ * confirmó el email. Es un 403 como el de plan, pero se distingue por el código
+ * para no ofrecerle al usuario que mejore el plan cuando lo que le falta es
+ * escribir seis dígitos.
+ */
+export function emailNoVerificado(e: unknown): string | null {
+  const b = cuerpo(e, 403);
+  if (b?.codigo !== 'EMAIL_NO_VERIFICADO') return null;
+  return String(b.message ?? 'Confirmá tu email para usar esta función.');
+}
+
+/**
  * Errores que ya muestra el manejo global de mutaciones (`app/providers.tsx`).
  * Las pantallas lo chequean antes de su propio toast para no avisar dos veces.
  */
 export function errorManejadoGlobal(e: unknown): boolean {
-  return errorDePlan(e) !== null || borradorExistente(e) !== null;
+  return (
+    errorDePlan(e) !== null ||
+    borradorExistente(e) !== null ||
+    emailNoVerificado(e) !== null
+  );
 }

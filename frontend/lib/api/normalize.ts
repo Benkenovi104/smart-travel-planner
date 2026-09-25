@@ -44,6 +44,10 @@ export function normalizeUsuario(u: MeApi): Usuario {
     nombre: u.nombre,
     apellido: u.apellido,
     email: u.email,
+    // Las cuentas anteriores a la migración vienen en true; si el backend es
+    // viejo y no manda el campo, se asume verificado para no mostrar el aviso
+    // a todo el mundo.
+    emailVerificado: u.email_verificado ?? true,
     fechaRegistro: u.fecha_registro,
     perfil: p
       ? {

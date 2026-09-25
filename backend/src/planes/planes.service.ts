@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import {
@@ -27,6 +31,23 @@ import { SuscripcionesService } from '../pagos/suscripciones.service.js';
 type Tx = Prisma.TransactionClient;
 
 const MS_DIA = 86_400_000;
+
+/**
+ * Acciones que exigen el email verificado. Son las que cuestan plata de verdad
+ * (Gemini, Ignav, Booking): sin esto, cualquiera con una dirección inventada
+ * puede quemar cuota de las APIs.
+ *
+ * CREAR_VIAJE queda afuera a propósito. Es una fila en la base y nada más, y
+ * dejarla pasar es lo que permite que alguien que todavía no fue a buscar el
+ * código igual pueda entrar y ver de qué se trata la app.
+ */
+const EXIGEN_EMAIL_VERIFICADO: readonly TipoConsumo[] = [
+  TipoConsumo.GENERAR_ITINERARIO,
+  TipoConsumo.REGENERAR_ITINERARIO,
+  TipoConsumo.BUSCAR_VUELOS,
+  TipoConsumo.BUSCAR_ALOJAMIENTO,
+  TipoConsumo.OPTIMIZAR_DIA,
+];
 
 /** Suscripciones por las que Mercado Pago sigue cobrando. */
 const COBRANDO: EstadoSuscripcion[] = [
@@ -197,12 +218,39 @@ export class PlanesService {
    *
    * `id_viaje` es obligatorio salvo en `CREAR_VIAJE`, que se cuenta por período.
    */
+  /**
+   * Corta las acciones caras si el email todavía no fue confirmado. No bloquea
+   * el login ni la navegación: el usuario entra, mira y crea un viaje; lo que
+   * no puede es gastar cuota de las APIs externas.
+   */
+  private async exigirEmailVerificado(
+    id_usuario: number,
+    accion: TipoConsumo,
+  ): Promise<void> {
+    if (!EXIGEN_EMAIL_VERIFICADO.includes(accion)) return;
+
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id_usuario },
+      select: { email_verificado: true },
+    });
+
+    if (usuario && !usuario.email_verificado) {
+      throw new ForbiddenException({
+        codigo: 'EMAIL_NO_VERIFICADO',
+        message:
+          'Confirmá tu email para usar esta función. Te mandamos un código al registrarte.',
+      });
+    }
+  }
+
   async verificar(
     id_usuario: number,
     accion: TipoConsumo,
     id_viaje?: number,
     ahora = new Date(),
   ): Promise<void> {
+    await this.exigirEmailVerificado(id_usuario, accion);
+
     const vigente = await this.planVigente(id_usuario, ahora);
     const limites = LIMITES[vigente.plan];
 

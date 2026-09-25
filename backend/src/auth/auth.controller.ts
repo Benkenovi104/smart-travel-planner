@@ -20,6 +20,7 @@ import { LoginDto } from './dto/login.dto.js';
 import { ChangePasswordDto } from './dto/change-password.dto.js';
 import { ForgotPasswordDto } from './dto/forgot-password.dto.js';
 import { ResetPasswordDto } from './dto/reset-password.dto.js';
+import { VerificarEmailDto } from './dto/verificar-email.dto.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 
 const AUTH_THROTTLE = { default: { limit: 5, ttl: 60_000 } };
@@ -46,6 +47,31 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Credenciales inválidas.' })
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+  @Post('verificar-email')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Throttle(AUTH_THROTTLE)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Confirmar el email con el código recibido' })
+  @ApiResponse({ status: 200, description: 'Email verificado.' })
+  @ApiResponse({ status: 400, description: 'Código inválido o vencido.' })
+  verificarEmail(@Request() req, @Body() dto: VerificarEmailDto) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
+    return this.authService.verificarEmail(req.user.id_usuario, dto.codigo);
+  }
+
+  @Post('reenviar-verificacion')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Throttle(AUTH_THROTTLE)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Pedir un código de verificación nuevo' })
+  @ApiResponse({ status: 200, description: 'Código enviado.' })
+  reenviarVerificacion(@Request() req) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
+    return this.authService.reenviarVerificacion(req.user.id_usuario);
   }
 
   @Post('change-password')

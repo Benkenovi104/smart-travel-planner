@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { describe, beforeEach, it, expect, jest } from '@jest/globals';
+import { ForbiddenException } from '@nestjs/common';
 import { PlanesService } from './planes.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { SuscripcionesService } from '../pagos/suscripciones.service.js';
@@ -51,6 +52,7 @@ describe('PlanesService', () => {
     // Registrado el 13/08: en Gratis, el período vigente va del 13/09 al 13/10.
     prisma.usuario.findUnique.mockResolvedValue({
       fecha_registro: utc(2026, 8, 13),
+      email_verificado: true,
     });
     prisma.suscripcion.findMany.mockResolvedValue([]);
     prisma.consumo.count.mockResolvedValue(0);
@@ -226,6 +228,41 @@ describe('PlanesService', () => {
       await service.planVigente(1, AHORA);
 
       expect(suscripciones.reconciliarVencidas).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('email sin verificar', () => {
+    beforeEach(() => {
+      prisma.usuario.findUnique.mockResolvedValue({
+        fecha_registro: utc(2026, 8, 13),
+        email_verificado: false,
+      });
+    });
+
+    it.each(['GENERAR_ITINERARIO', 'BUSCAR_VUELOS', 'BUSCAR_ALOJAMIENTO'])(
+      'bloquea %s, que gasta cuota de una API paga',
+      async (accion) => {
+        const error = await capturar(service.verificar(1, accion, 9, AHORA));
+
+        expect(error).toBeInstanceOf(ForbiddenException);
+        expect((error as ForbiddenException).getResponse()).toMatchObject({
+          codigo: 'EMAIL_NO_VERIFICADO',
+        });
+      },
+    );
+
+    it('deja crear un viaje: es una fila en la base, no gasta nada', async () => {
+      // Si esto también se bloqueara, una cuenta sin verificar no podría ni
+      // entrar a ver de qué se trata la app.
+      await expect(
+        service.verificar(1, 'CREAR_VIAJE', undefined, AHORA),
+      ).resolves.toBeUndefined();
+    });
+
+    it('no consulta el uso: corta antes de contar consumos', async () => {
+      await capturar(service.verificar(1, 'BUSCAR_VUELOS', 9, AHORA));
+
+      expect(prisma.consumo.count).not.toHaveBeenCalled();
     });
   });
 

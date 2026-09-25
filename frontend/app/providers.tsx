@@ -11,7 +11,11 @@ import {
 import { Toaster, toast } from 'sonner';
 import { ApiError } from '@/lib/api/client';
 import { qk } from '@/lib/query/keys';
-import { borradorExistente, errorDePlan } from '@/lib/planes/errores';
+import {
+  borradorExistente,
+  errorDePlan,
+  emailNoVerificado,
+} from '@/lib/planes/errores';
 import { mostrarDialogoLimite } from '@/lib/planes/dialogo-limite';
 import { DialogoLimite } from '@/components/planes/dialogo-limite';
 import { PRIMER_PASO } from '@/components/viajes/wizard-pasos';
@@ -70,6 +74,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
           const limite = errorDePlan(error);
           if (limite) {
             mostrarDialogoLimite(limite);
+            return;
+          }
+          // El banner para cargar el código ya está fijo arriba de la pantalla,
+          // así que el toast sólo tiene que explicar por qué no pasó nada.
+          const sinVerificar = emailNoVerificado(error);
+          if (sinVerificar) {
+            toast.error(sinVerificar);
             return;
           }
           const borrador = borradorExistente(error);

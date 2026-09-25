@@ -15,6 +15,11 @@ model Usuario {
   password_hash      String           @db.VarChar
   // Obligatoria: es el ancla del período del plan Gratis (ver docs/PLANES.md).
   fecha_registro     DateTime         @default(now()) @db.Timestamp(6)
+  // Verificación del email. Las cuentas anteriores a la migración quedaron en
+  // `true`: la regla corre para las altas nuevas, no retroactivamente.
+  email_verificado   Boolean          @default(false)
+  verif_token_hash   String?          @db.VarChar
+  verif_token_expira DateTime?        @db.Timestamp(6)
   reset_token_hash   String?          @db.VarChar
   reset_token_expira DateTime?        @db.Timestamp(6)
   perfil_viajero     PerfilViajero?

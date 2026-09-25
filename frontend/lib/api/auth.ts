@@ -60,3 +60,19 @@ export function changePassword(input: {
     body: JSON.stringify(input),
   });
 }
+
+/** Confirma el email con el código de 6 dígitos que llegó al registrarse. */
+export function verificarEmail(codigo: string) {
+  return apiFetch<{ message: string; email_verificado: boolean }>(
+    'auth/verificar-email',
+    { method: 'POST', body: JSON.stringify({ codigo }) },
+  );
+}
+
+/** Pide un código nuevo. El anterior deja de servir. */
+export function reenviarVerificacion() {
+  return apiFetch<{ message: string; email_verificado: boolean }>(
+    'auth/reenviar-verificacion',
+    { method: 'POST' },
+  );
+}

@@ -110,4 +110,38 @@ export class MailService {
       throw new InternalServerErrorException('No se pudo enviar el email');
     }
   }
+
+  /** Código de 6 dígitos para confirmar que la casilla es de quien se registró. */
+  async enviarCodigoVerificacion(
+    email: string,
+    codigo: string,
+    horasValidez: number,
+  ): Promise<void> {
+    const from = process.env.MAIL_FROM ?? process.env.SMTP_USER ?? '';
+    const transporter = this.getTransporter();
+
+    try {
+      await transporter.sendMail({
+        from,
+        to: email,
+        subject: `${codigo} es tu código — Smart Travel Planner`,
+        text:
+          `Tu código de verificación es: ${codigo}\n\n` +
+          `Ingresalo en la app para confirmar tu email. Vence en ${horasValidez} horas.\n\n` +
+          `Si no creaste esta cuenta, ignorá este mensaje.`,
+        html:
+          `<p>Tu código de verificación es:</p>` +
+          `<p style="font-size:28px;letter-spacing:6px;font-weight:bold">${codigo}</p>` +
+          `<p>Ingresalo en la app para confirmar tu email. Vence en ${horasValidez} horas.</p>` +
+          `<p>Si no creaste esta cuenta, ignorá este mensaje.</p>`,
+      });
+      this.logger.log(`Código de verificación enviado a ${email}`);
+    } catch (error) {
+      const mensaje = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Falló el envío de email a ${email}: ${mensaje}`);
+      throw new InternalServerErrorException(
+        'No se pudo enviar el código de verificación',
+      );
+    }
+  }
 }
