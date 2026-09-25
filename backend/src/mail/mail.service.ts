@@ -44,8 +44,22 @@ export class MailService {
     return this.transporter;
   }
 
+  /**
+   * El remitente con nombre visible, no la dirección pelada.
+   *
+   * Importa para que el mensaje llegue: los filtros —Outlook sobre todo, que es
+   * bastante más estricto que Gmail y además descarta en silencio, sin rebote—
+   * desconfían del correo transaccional que sale de una casilla personal. Un
+   * `From` con nombre no lo arregla del todo, pero suma. El arreglo de verdad
+   * es mandar desde un dominio propio con un proveedor transaccional.
+   */
+  private remitente(): string {
+    const direccion = process.env.MAIL_FROM ?? process.env.SMTP_USER ?? '';
+    return direccion ? `Smart Travel Planner <${direccion}>` : '';
+  }
+
   async enviarResetPassword(email: string, resetUrl: string): Promise<void> {
-    const from = process.env.MAIL_FROM ?? process.env.SMTP_USER ?? '';
+    const from = this.remitente();
     const transporter = this.getTransporter();
 
     try {
@@ -84,7 +98,7 @@ export class MailService {
    * API responde lo mismo exista o no la cuenta. Es lo que hacen GitHub y Slack.
    */
   async enviarCuentaInexistente(email: string): Promise<void> {
-    const from = process.env.MAIL_FROM ?? process.env.SMTP_USER ?? '';
+    const from = this.remitente();
     const transporter = this.getTransporter();
     const baseUrl = process.env.FRONTEND_URL ?? 'http://localhost:3001';
     const registroUrl = `${baseUrl}/register`;
@@ -117,7 +131,7 @@ export class MailService {
     codigo: string,
     horasValidez: number,
   ): Promise<void> {
-    const from = process.env.MAIL_FROM ?? process.env.SMTP_USER ?? '';
+    const from = this.remitente();
     const transporter = this.getTransporter();
 
     try {
