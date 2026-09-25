@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { describe, beforeEach, it, expect, jest } from '@jest/globals';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { AuthService } from './auth.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -169,6 +169,75 @@ describe('AuthService · verificación de email', () => {
       await service.reenviarVerificacion(7);
 
       expect(mail.enviarCodigoVerificacion).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('cambiarEmailSinVerificar', () => {
+    it('cambia la dirección y manda el código a la nueva', async () => {
+      // El caso real: alguien tipeó mal su mail al registrarse. Reenviar no
+      // sirve, porque vuelve a ir a la dirección equivocada.
+      prisma.usuario.findUnique
+        .mockResolvedValueOnce({
+          id_usuario: 7,
+          email: 'juan@gmial.com',
+          email_verificado: false,
+        })
+        .mockResolvedValueOnce(null); // la nueva está libre
+
+      const res = await service.cambiarEmailSinVerificar(7, 'juan@gmail.com');
+
+      expect(res.email).toBe('juan@gmail.com');
+      const [actualiza] = prisma.usuario.update.mock.calls[0] as [any];
+      expect(actualiza.data.email).toBe('juan@gmail.com');
+      expect(mail.enviarCodigoVerificacion.mock.calls[0][0]).toBe(
+        'juan@gmail.com',
+      );
+    });
+
+    it('no pisa el email de otra cuenta', async () => {
+      prisma.usuario.findUnique
+        .mockResolvedValueOnce({
+          id_usuario: 7,
+          email: 'juan@gmial.com',
+          email_verificado: false,
+        })
+        .mockResolvedValueOnce({ id_usuario: 9 }); // ya existe
+
+      await expect(
+        service.cambiarEmailSinVerificar(7, 'ocupado@gmail.com'),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.usuario.update).not.toHaveBeenCalled();
+    });
+
+    it('sobre una cuenta ya verificada no deja cambiarlo', async () => {
+      // Cambiar el email de una cuenta confirmada es un vector de secuestro:
+      // necesita contraseña y aviso a la dirección vieja, y eso no está acá.
+      prisma.usuario.findUnique.mockResolvedValue({
+        id_usuario: 7,
+        email: 'juan@gmail.com',
+        email_verificado: true,
+      });
+
+      await expect(
+        service.cambiarEmailSinVerificar(7, 'otro@gmail.com'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('repetir la misma dirección sólo reenvía, sin tocar la base', async () => {
+      prisma.usuario.findUnique.mockResolvedValue({
+        id_usuario: 7,
+        email: 'juan@gmail.com',
+        email_verificado: false,
+      });
+
+      await service.cambiarEmailSinVerificar(7, 'juan@gmail.com');
+
+      // El único update es el del código nuevo, no uno del email.
+      const escrituras = prisma.usuario.update.mock.calls.map((c: any) =>
+        Object.keys(c[0].data),
+      );
+      expect(escrituras.flat()).not.toContain('email');
+      expect(mail.enviarCodigoVerificacion).toHaveBeenCalledTimes(1);
     });
   });
 });

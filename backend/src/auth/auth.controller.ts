@@ -21,6 +21,7 @@ import { ChangePasswordDto } from './dto/change-password.dto.js';
 import { ForgotPasswordDto } from './dto/forgot-password.dto.js';
 import { ResetPasswordDto } from './dto/reset-password.dto.js';
 import { VerificarEmailDto } from './dto/verificar-email.dto.js';
+import { CambiarEmailDto } from './dto/cambiar-email.dto.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 
 const AUTH_THROTTLE = { default: { limit: 5, ttl: 60_000 } };
@@ -72,6 +73,28 @@ export class AuthController {
   reenviarVerificacion(@Request() req) {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
     return this.authService.reenviarVerificacion(req.user.id_usuario);
+  }
+
+  @Post('cambiar-email')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Throttle(AUTH_THROTTLE)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Corregir el email de una cuenta que todavía no verificó',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Email actualizado; código enviado.',
+  })
+  @ApiResponse({ status: 400, description: 'La cuenta ya está verificada.' })
+  @ApiResponse({ status: 409, description: 'El email ya está registrado.' })
+  cambiarEmail(@Request() req, @Body() dto: CambiarEmailDto) {
+    return this.authService.cambiarEmailSinVerificar(
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
+      req.user.id_usuario,
+      dto.email,
+    );
   }
 
   @Post('change-password')

@@ -188,6 +188,47 @@ export class AuthService {
     return { message: 'Te mandamos un código nuevo', email_verificado: false };
   }
 
+  /**
+   * Corrige la dirección de una cuenta que todavía no verificó.
+   *
+   * Sin esto, equivocarse tipeando el email al registrarse deja la cuenta
+   * muerta: el código se manda a una casilla que no es tuya (o que no existe) y
+   * no se puede hacer nada, porque sin verificar el backend rechaza hasta crear
+   * un viaje. Reenviar no ayuda: vuelve a ir a la dirección equivocada.
+   *
+   * Sólo mientras no esté verificada. Cambiar el email de una cuenta ya
+   * confirmada es otra cosa —habría que pedir la contraseña y avisar a la
+   * dirección vieja, porque es un vector de secuestro de cuenta— y no se
+   * resuelve acá.
+   */
+  async cambiarEmailSinVerificar(id_usuario: number, email: string) {
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id_usuario },
+    });
+    if (!usuario) throw new UnauthorizedException('Credenciales inválidas');
+
+    if (usuario.email_verificado) {
+      throw new BadRequestException(
+        'Tu email ya está verificado. Para cambiarlo, escribinos.',
+      );
+    }
+
+    if (email !== usuario.email) {
+      const ocupado = await this.prisma.usuario.findUnique({
+        where: { email },
+      });
+      if (ocupado) throw new ConflictException('El email ya está registrado');
+
+      await this.prisma.usuario.update({
+        where: { id_usuario },
+        data: { email },
+      });
+    }
+
+    await this.mandarCodigoVerificacion(id_usuario, email);
+    return { message: `Te mandamos un código a ${email}`, email };
+  }
+
   async login(dto: LoginDto) {
     const usuario = await this.prisma.usuario.findUnique({
       where: { email: dto.email },

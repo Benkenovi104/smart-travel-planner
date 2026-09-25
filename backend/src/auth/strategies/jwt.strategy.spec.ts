@@ -23,9 +23,9 @@ describe('JwtStrategy', () => {
       email: 'a@b.com',
     });
 
-    await expect(strategy.validate({ sub: 1, email: 'a@b.com' })).resolves.toEqual(
-      { id_usuario: 1, email: 'a@b.com' },
-    );
+    await expect(
+      strategy.validate({ sub: 1, email: 'a@b.com' }),
+    ).resolves.toEqual({ id_usuario: 1, email: 'a@b.com' });
   });
 
   it('rechaza el token de una cuenta borrada', async () => {

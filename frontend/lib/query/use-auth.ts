@@ -57,6 +57,15 @@ export function useReenviarVerificacion() {
   return useMutation({ mutationFn: auth.reenviarVerificacion });
 }
 
+/** Cambia el email antes de verificar: invalida `me`, que es de donde sale el banner. */
+export function useCambiarEmail() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: auth.cambiarEmail,
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.me }),
+  });
+}
+
 /**
  * Borra la cuenta. El backend no puede invalidar la cookie httpOnly (la setea el
  * BFF), así que después del borrado pegamos a /api/auth/logout para limpiarla:

@@ -76,3 +76,11 @@ export function reenviarVerificacion() {
     { method: 'POST' },
   );
 }
+
+/** Corrige la dirección de una cuenta que todavía no verificó y reenvía el código. */
+export function cambiarEmail(email: string) {
+  return apiFetch<{ message: string; email: string }>('auth/cambiar-email', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}

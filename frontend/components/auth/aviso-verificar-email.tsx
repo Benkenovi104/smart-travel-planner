@@ -28,6 +28,7 @@ import { useMe } from '@/lib/query/use-usuario';
 import {
   useVerificarEmail,
   useReenviarVerificacion,
+  useCambiarEmail,
 } from '@/lib/query/use-auth';
 import { ApiError } from '@/lib/api/client';
 
@@ -37,6 +38,11 @@ const schema = z.object({
     .regex(/^\d{6}$/, 'Son los 6 dígitos que te llegaron por mail'),
 });
 type Values = z.infer<typeof schema>;
+
+const schemaEmail = z.object({
+  email: z.string().email('Ingresá un email válido'),
+});
+type ValoresEmail = z.infer<typeof schemaEmail>;
 
 /**
  * Barra fija arriba mientras la cuenta no confirmó el email.
@@ -48,12 +54,19 @@ type Values = z.infer<typeof schema>;
 export function AvisoVerificarEmail() {
   const { data: me } = useMe();
   const [abierto, setAbierto] = useState(false);
+  const [corrigiendo, setCorrigiendo] = useState(false);
   const verificar = useVerificarEmail();
   const reenviar = useReenviarVerificacion();
+  const cambiarEmail = useCambiarEmail();
 
   const form = useForm<Values>({
     resolver: zodResolver(schema),
     defaultValues: { codigo: '' },
+  });
+
+  const formEmail = useForm<ValoresEmail>({
+    resolver: zodResolver(schemaEmail),
+    defaultValues: { email: '' },
   });
 
   // Mientras `me` no cargó no se muestra nada: un banner que aparece y
@@ -163,6 +176,87 @@ export function AvisoVerificarEmail() {
                 </Button>
               </form>
             </Form>
+
+            {/* Reenviar no sirve si la dirección está mal escrita: vuelve a ir
+                al mismo lado. Sin esta salida, un error de tipeo al registrarse
+                deja la cuenta sin poder hacer nada. */}
+            <div className="border-t pt-3">
+              {corrigiendo ? (
+                <Form {...formEmail}>
+                  <form
+                    onSubmit={formEmail.handleSubmit((v) =>
+                      cambiarEmail.mutate(v.email, {
+                        onSuccess: (r) => {
+                          setCorrigiendo(false);
+                          formEmail.reset();
+                          toast.success(r.message);
+                        },
+                        onError: (e) =>
+                          formEmail.setError('email', {
+                            message:
+                              e instanceof ApiError
+                                ? e.message
+                                : 'No se pudo cambiar el email.',
+                          }),
+                      }),
+                    )}
+                    className="space-y-2"
+                  >
+                    <FormField
+                      control={formEmail.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              type="email"
+                              autoComplete="email"
+                              placeholder="tu@email.com"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        type="submit"
+                        size="sm"
+                        className="flex-1"
+                        disabled={cambiarEmail.isPending}
+                      >
+                        {cambiarEmail.isPending && (
+                          <Loader2 className="mr-2 size-4 animate-spin" />
+                        )}
+                        Guardar y reenviar
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setCorrigiendo(false)}
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  </form>
+                </Form>
+              ) : (
+                <Button
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  className="h-auto w-full p-0 text-xs"
+                  onClick={() => {
+                    formEmail.reset({ email: me.email });
+                    setCorrigiendo(true);
+                  }}
+                >
+                  ¿Te equivocaste de dirección? Cambiala
+                </Button>
+              )}
+            </div>
           </DialogContent>
         </Dialog>
       </div>
