@@ -255,7 +255,8 @@ La app se despliega en tres servicios gratuitos:
 1. **Render** → New Web Service → el repo → Root Directory `backend`, runtime Docker, health check `/api/health`. Cargar las variables de entorno (ver [backend/README](backend/README.md#variables-de-entorno)) **sin** `PORT`, que la inyecta Render, y con `THROTTLE_LIMIT` más alto (por ejemplo `300`): el límite de peticiones se cuenta por IP y, como el frontend hace de intermediario, el backend ve siempre la IP de Vercel.
 2. **Vercel** → New Project → el repo → Root Directory `frontend` → variable `BACKEND_URL=https://<servicio>.onrender.com/api`.
 3. Volver a Render y completar `FRONTEND_URL=https://<proyecto>.vercel.app` y `MP_BACK_URL=https://<servicio>.onrender.com/api/pagos/volver`.
-4. En el panel de Mercado Pago, apuntar el webhook a `https://<servicio>.onrender.com/api/pagos/webhook`.
+4. **Cargar `RESEND_API_KEY`**, o no se manda ningún email. Render bloquea los puertos SMTP en el plan free, así que las credenciales de Gmail no alcanzan: los envíos fallan con `ENETUNREACH` y sólo se ve en los logs, porque la app degrada en silencio a propósito. Verificar el dominio en Resend y apuntar `MAIL_FROM` a una dirección de ese dominio.
+5. En el panel de Mercado Pago, apuntar el webhook a `https://<servicio>.onrender.com/api/pagos/webhook`.
 
 **Mercado Pago queda en modo de prueba.** Lo desplegado son las credenciales de la cuenta vendedora de prueba, así que **nadie puede pagar con dinero real**: para completar un pago hay que entrar al checkout con la cuenta compradora de prueba.
 
