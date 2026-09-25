@@ -41,10 +41,9 @@ type Values = z.infer<typeof schema>;
 /**
  * Barra fija arriba mientras la cuenta no confirmó el email.
  *
- * No bloquea la navegación a propósito: el usuario puede entrar, mirar y crear
- * un viaje sin verificar. Lo que el backend corta son las acciones que gastan
- * plata (generar itinerario, buscar vuelos y alojamiento), así que el aviso
- * tiene que estar a mano pero sin ser un muro.
+ * No bloquea la navegación, pero sí todo lo que se puede hacer: el backend
+ * rechaza crear un viaje y de ahí en adelante. Por eso el aviso está fijo arriba
+ * y con el diálogo a un clic, en vez de escondido en el perfil.
  */
 export function AvisoVerificarEmail() {
   const { data: me } = useMe();
@@ -83,8 +82,8 @@ export function AvisoVerificarEmail() {
       <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-3 px-4 py-2.5 text-sm">
         <MailWarning className="size-4 shrink-0 text-amber-500" />
         <p className="flex-1 min-w-48">
-          Confirmá tu email para generar itinerarios y buscar vuelos. Te
-          mandamos un código a{' '}
+          Confirmá tu email para empezar a planificar viajes. Te mandamos un
+          código a{' '}
           <span className="font-medium">{me.email}</span>.
         </p>
 

@@ -251,12 +251,17 @@ describe('PlanesService', () => {
       },
     );
 
-    it('deja crear un viaje: es una fila en la base, no gasta nada', async () => {
-      // Si esto también se bloqueara, una cuenta sin verificar no podría ni
-      // entrar a ver de qué se trata la app.
-      await expect(
+    it('bloquea también crear un viaje, que es la puerta al resto', async () => {
+      // Sin viaje no hay itinerario que generar ni vuelos que buscar: dejarlo
+      // pasar sólo movía el bloqueo un paso más adelante.
+      const error = await capturar(
         service.verificar(1, 'CREAR_VIAJE', undefined, AHORA),
-      ).resolves.toBeUndefined();
+      );
+
+      expect(error).toBeInstanceOf(ForbiddenException);
+      expect((error as ForbiddenException).getResponse()).toMatchObject({
+        codigo: 'EMAIL_NO_VERIFICADO',
+      });
     });
 
     it('no consulta el uso: corta antes de contar consumos', async () => {

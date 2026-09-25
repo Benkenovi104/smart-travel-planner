@@ -33,15 +33,20 @@ type Tx = Prisma.TransactionClient;
 const MS_DIA = 86_400_000;
 
 /**
- * Acciones que exigen el email verificado. Son las que cuestan plata de verdad
- * (Gemini, Ignav, Booking): sin esto, cualquiera con una dirección inventada
- * puede quemar cuota de las APIs.
+ * Acciones que exigen el email verificado: todas las que consume el plan.
  *
- * CREAR_VIAJE queda afuera a propósito. Es una fila en la base y nada más, y
- * dejarla pasar es lo que permite que alguien que todavía no fue a buscar el
- * código igual pueda entrar y ver de qué se trata la app.
+ * Las de itinerario y búsqueda cuestan plata de verdad (Gemini, Ignav,
+ * Booking). CREAR_VIAJE no cuesta nada por sí sola —es una fila en la base—,
+ * pero se bloquea igual porque es la puerta de entrada a todas las demás: sin
+ * viaje no hay nada que generar ni que buscar, así que dejarla pasar sólo
+ * lograba que el usuario avanzara un paso para chocar con el bloqueo después.
+ *
+ * La contra es que una cuenta sin verificar no puede hacer absolutamente nada,
+ * y si el código no llega queda encerrada. Lo atenúa el botón de reenvío del
+ * banner; el escape que falta es poder corregir la dirección.
  */
 const EXIGEN_EMAIL_VERIFICADO: readonly TipoConsumo[] = [
+  TipoConsumo.CREAR_VIAJE,
   TipoConsumo.GENERAR_ITINERARIO,
   TipoConsumo.REGENERAR_ITINERARIO,
   TipoConsumo.BUSCAR_VUELOS,
@@ -219,9 +224,9 @@ export class PlanesService {
    * `id_viaje` es obligatorio salvo en `CREAR_VIAJE`, que se cuenta por período.
    */
   /**
-   * Corta las acciones caras si el email todavía no fue confirmado. No bloquea
-   * el login ni la navegación: el usuario entra, mira y crea un viaje; lo que
-   * no puede es gastar cuota de las APIs externas.
+   * Corta las acciones del plan si el email todavía no fue confirmado. El login
+   * y la navegación siguen abiertos: el usuario entra y ve la app, pero no puede
+   * crear un viaje ni gastar cuota de las APIs externas.
    */
   private async exigirEmailVerificado(
     id_usuario: number,
