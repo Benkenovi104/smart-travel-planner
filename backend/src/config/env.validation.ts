@@ -53,11 +53,11 @@ class EnvironmentVariables {
   @IsString()
   PORT?: string;
 
-  // Resend: si está, los emails salen por su API HTTP en vez de SMTP. Hace
+  // Brevo: si está, los emails salen por su API HTTP en vez de SMTP. Hace
   // falta desplegado, porque Render bloquea los puertos SMTP en el plan free.
   @IsOptional()
   @IsString()
-  RESEND_API_KEY?: string;
+  BREVO_API_KEY?: string;
 
   // SMTP (Gmail) para el email de reseteo de contraseña. Opcionales: el server
   // arranca sin ellas, pero /auth/forgot-password fallará hasta configurarlas.

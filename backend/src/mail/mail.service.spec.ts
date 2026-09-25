@@ -23,8 +23,10 @@ describe('MailService', () => {
 
   beforeEach(() => {
     process.env.MAIL_FROM = 'hola@midominio.com';
-    delete process.env.RESEND_API_KEY;
-    fetchMock = jest.fn(async () => ({ ok: true, status: 200 }) as Response);
+    delete process.env.BREVO_API_KEY;
+    fetchMock = jest.fn(() =>
+      Promise.resolve({ ok: true, status: 201 } as Response),
+    );
     global.fetch = fetchMock as unknown as typeof fetch;
     service = new MailService();
   });
@@ -33,9 +35,9 @@ describe('MailService', () => {
     process.env = { ...envOriginal };
   });
 
-  describe('con RESEND_API_KEY', () => {
+  describe('con BREVO_API_KEY', () => {
     beforeEach(() => {
-      process.env.RESEND_API_KEY = 'la-key';
+      process.env.BREVO_API_KEY = 'la-key';
     });
 
     it('manda por la API HTTP y no toca SMTP', async () => {
@@ -43,9 +45,9 @@ describe('MailService', () => {
 
       expect(fetchMock).toHaveBeenCalledTimes(1);
       const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-      expect(url).toBe('https://api.resend.com/emails');
-      expect((init.headers as Record<string, string>).Authorization).toBe(
-        'Bearer la-key',
+      expect(url).toBe('https://api.brevo.com/v3/smtp/email');
+      expect((init.headers as Record<string, string>)['api-key']).toBe(
+        'la-key',
       );
     });
 
@@ -53,18 +55,26 @@ describe('MailService', () => {
       await service.enviarCodigoVerificacion('juan@test.com', '481203', 24);
 
       const init = fetchMock.mock.calls[0][1] as RequestInit;
-      const body = JSON.parse(init.body as string) as Record<string, string>;
-      expect(body.from).toBe('Smart Travel Planner <hola@midominio.com>');
-      expect(body.to).toBe('juan@test.com');
+      const body = JSON.parse(init.body as string) as {
+        sender: { name: string; email: string };
+        to: { email: string }[];
+        subject: string;
+      };
+      expect(body.sender).toEqual({
+        name: 'Smart Travel Planner',
+        email: 'hola@midominio.com',
+      });
+      expect(body.to).toEqual([{ email: 'juan@test.com' }]);
       expect(body.subject).toContain('481203');
     });
 
     it('un rechazo de la API se convierte en error, no pasa por éxito', async () => {
-      // El caso real: el dominio del MAIL_FROM no está verificado en Resend.
+      // El caso real: la dirección de MAIL_FROM no está verificada en Brevo, o
+      // la cuenta todavía no pasó la aprobación manual del alta.
       fetchMock.mockResolvedValue({
         ok: false,
         status: 403,
-        text: async () => '{"message":"domain is not verified"}',
+        text: () => Promise.resolve('{"message":"sender not valid"}'),
       } as unknown as Response);
 
       await expect(
@@ -76,7 +86,7 @@ describe('MailService', () => {
       fetchMock.mockResolvedValue({
         ok: false,
         status: 403,
-        text: async () => 'domain is not verified',
+        text: () => Promise.resolve('sender not valid'),
       } as unknown as Response);
 
       const error = await service
@@ -84,12 +94,12 @@ describe('MailService', () => {
         .catch((e: Error) => e);
 
       expect(error.message).toBe('No se pudo enviar el código de verificación');
-      expect(error.message).not.toContain('domain');
+      expect(error.message).not.toContain('sender');
     });
   });
 
-  describe('sin RESEND_API_KEY', () => {
-    it('cae a SMTP: no le pega a la API de Resend', async () => {
+  describe('sin BREVO_API_KEY', () => {
+    it('cae a SMTP: no le pega a la API de Brevo', async () => {
       // Apunta a un puerto cerrado local: el test no debe salir a la red ni
       // depender de Gmail para probar por dónde enruta.
       process.env.SMTP_HOST = '127.0.0.1';

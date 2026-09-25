@@ -19,7 +19,7 @@ export class MailService {
   private transporter: Transporter | null = null;
 
   /**
-   * Con `RESEND_API_KEY` el envío sale por la API HTTP de Resend; sin ella, por
+   * Con `BREVO_API_KEY` el envío sale por la API HTTP de Brevo; sin ella, por
    * SMTP con nodemailer.
    *
    * No es una preferencia estética: **Render bloquea el tráfico saliente a los
@@ -28,11 +28,18 @@ export class MailService {
    * un timeout, aunque las credenciales estén bien. Una API HTTP no usa esos
    * puertos, así que pasa.
    *
+   * Brevo y no Resend porque Resend exige un dominio propio verificado para
+   * escribirle a alguien que no sea el dueño de la cuenta, y este proyecto no
+   * tiene dominio. Brevo alcanza con verificar **una dirección de remitente**
+   * (un Gmail sirve) con un código, y desde ahí le manda a cualquiera. Si en
+   * algún momento hay dominio propio, Brevo también lo soporta y mejora la
+   * entrega; no hay que cambiar de proveedor otra vez.
+   *
    * El SMTP se mantiene para desarrollo local, donde no hay bloqueo y evita
    * tener que configurar nada.
    */
-  private get usaResend(): boolean {
-    return Boolean(process.env.RESEND_API_KEY);
+  private get usaBrevo(): boolean {
+    return Boolean(process.env.BREVO_API_KEY);
   }
 
   /**
@@ -69,43 +76,59 @@ export class MailService {
   }
 
   /**
-   * El remitente con nombre visible, no la dirección pelada.
+   * El remitente, con nombre visible además de la dirección.
    *
-   * Importa para que el mensaje llegue: los filtros —Outlook sobre todo, que es
-   * más estricto que Gmail y además descarta en silencio, sin rebote—
-   * desconfían del correo transaccional que sale de una casilla personal.
+   * El nombre importa para que el mensaje llegue: los filtros —Outlook sobre
+   * todo, que es más estricto que Gmail y además descarta en silencio, sin
+   * rebote— desconfían del correo transaccional que sale de una casilla
+   * personal sin identificar.
    *
-   * Con Resend, además, `MAIL_FROM` **tiene que ser una dirección de un dominio
-   * verificado** en la cuenta de Resend; una de Gmail la rechaza con 403.
+   * `MAIL_FROM` **tiene que ser una dirección verificada en Brevo**, o el envío
+   * se rechaza. Verificarla es cargarla en el panel y responder un código.
    */
-  private remitente(): string {
-    const direccion = process.env.MAIL_FROM ?? process.env.SMTP_USER ?? '';
-    return direccion ? `Smart Travel Planner <${direccion}>` : '';
+  private remitente(): { nombre: string; direccion: string } {
+    return {
+      nombre: 'Smart Travel Planner',
+      direccion: process.env.MAIL_FROM ?? process.env.SMTP_USER ?? '',
+    };
   }
 
-  private async porResend(m: Mensaje): Promise<void> {
-    const res = await fetch('https://api.resend.com/emails', {
+  private async porBrevo(m: Mensaje): Promise<void> {
+    const { nombre, direccion } = this.remitente();
+
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-        'Content-Type': 'application/json',
+        'api-key': process.env.BREVO_API_KEY!,
+        'content-type': 'application/json',
+        accept: 'application/json',
       },
-      body: JSON.stringify({ from: this.remitente(), ...m }),
+      body: JSON.stringify({
+        sender: { name: nombre, email: direccion },
+        to: [{ email: m.to }],
+        subject: m.subject,
+        htmlContent: m.html,
+        textContent: m.text,
+      }),
     });
 
     if (!res.ok) {
-      // El cuerpo trae el motivo real (dominio sin verificar, key inválida,
-      // destinatario no permitido en el modo de prueba). Sin esto queda un
-      // "falló el envío" imposible de diagnosticar.
+      // El cuerpo trae el motivo real (remitente sin verificar, key inválida,
+      // cuenta todavía sin aprobar). Sin esto queda un "falló el envío"
+      // imposible de diagnosticar.
       const detalle = await res.text().catch(() => '');
       throw new Error(
-        `Resend respondió ${res.status}: ${detalle.slice(0, 300)}`,
+        `Brevo respondió ${res.status}: ${detalle.slice(0, 300)}`,
       );
     }
   }
 
   private async porSmtp(m: Mensaje): Promise<void> {
-    await this.getTransporter().sendMail({ from: this.remitente(), ...m });
+    const { nombre, direccion } = this.remitente();
+    await this.getTransporter().sendMail({
+      from: direccion ? `${nombre} <${direccion}>` : '',
+      ...m,
+    });
   }
 
   /**
@@ -119,7 +142,7 @@ export class MailService {
     siFalla: string,
   ): Promise<void> {
     try {
-      if (this.usaResend) await this.porResend(m);
+      if (this.usaBrevo) await this.porBrevo(m);
       else await this.porSmtp(m);
       this.logger.log(`${queEs} enviado a ${m.to}`);
     } catch (error) {
